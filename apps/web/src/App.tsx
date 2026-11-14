@@ -1,0 +1,112 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Activity, AudioLines, BrainCircuit, ChevronDown, CircleHelp, Database, Filter, Focus, GitBranch, Layers3, Maximize2, Mic, MicOff, Pause, Play, RotateCcw, Search, Send, Settings2, ShieldCheck, Volume2, VolumeX, X } from 'lucide-react';
+import ReactECharts from 'echarts-for-react';
+import { GraphScene } from './GraphScene';
+import { Hologram } from './Hologram';
+import { fallbackGraph, fallbackStatus } from './demo';
+import type { AvatarState, Evidence, GraphData, Status } from './types';
+
+const NAV=['Observatory','Research','LLM Lab','Experiments','Agents','Pipelines','Analytics','Reports'];
+const kindLabels: Record<string,string>={PAPER:'Research',GRANT:'Public funding',MODEL:'Models',ALGORITHM:'Algorithms',INDUSTRY:'Industries',REPOSITORY:'Open source',SCIENTIFIC_TOPIC:'Topics'};
+const kindColors: Record<string,string>={PAPER:'#498df8',GRANT:'#f1b465',MODEL:'#a48cff',ALGORITHM:'#8cecff',INDUSTRY:'#46d4bc',REPOSITORY:'#84adfb',SCIENTIFIC_TOPIC:'#e3f4ff'};
+type Citation={label:string;url:string;source:string;entity_id:string};
+type Message={role:'user'|'assistant';text:string;citations?:Citation[]};
+type SpeechRecognitionLike={start:()=>void;stop:()=>void;onresult:((e:{results:{[key:number]:{[key:number]:{transcript:string}}}})=>void)|null;onerror:(()=>void)|null;onend:(()=>void)|null};
+
+function useReducedMotion(){const [reduced,setReduced]=useState(window.matchMedia('(prefers-reduced-motion: reduce)').matches);useEffect(()=>{const q=window.matchMedia('(prefers-reduced-motion: reduce)');const f=()=>setReduced(q.matches);q.addEventListener('change',f);return()=>q.removeEventListener('change',f)},[]);return reduced;}
+
+function speak(text:string,onLevel:(v:number)=>void,onDone:()=>void,volume:number){
+  if(!('speechSynthesis' in window)){onDone();return;}
+  window.speechSynthesis.cancel();
+  const utterance=new SpeechSynthesisUtterance(text);utterance.rate=.96;utterance.pitch=.76;utterance.volume=volume;
+  let timer=0;utterance.onstart=()=>{onLevel(.18)};
+  utterance.onboundary=(e)=>{if(e.name==='word'){onLevel(Math.min(1,.45+String(text.slice(e.charIndex).split(/\s/)[0]).length*.035));window.clearTimeout(timer);timer=window.setTimeout(()=>onLevel(.12),170)}};
+  utterance.onend=()=>{window.clearTimeout(timer);onLevel(0);onDone()};utterance.onerror=()=>{window.clearTimeout(timer);onLevel(0);onDone()};
+  window.speechSynthesis.speak(utterance);
+}
+
+export default function App(){
+  const [page,setPage]=useState('Observatory');const [data,setData]=useState<GraphData>(fallbackGraph);const [status,setStatus]=useState<Status>(fallbackStatus);
+  const [apiOnline,setApiOnline]=useState(false);const [selected,setSelected]=useState<string|null>(null);const [query,setQuery]=useState('');const [filterOpen,setFilterOpen]=useState(false);
+  const [visibleKinds,setVisibleKinds]=useState<Set<string>>(new Set(Object.keys(kindLabels)));const [visibleEdges,setVisibleEdges]=useState<Set<string>>(new Set(['DEMO_ASSOCIATION','MENTIONS']));const [highlighted,setHighlighted]=useState<Set<string>>(new Set());
+  const [paused,setPaused]=useState(false);const [mode2d,setMode2d]=useState(false);const [resetSignal,setResetSignal]=useState(0);
+  const [chatOpen,setChatOpen]=useState(true);const [prompt,setPrompt]=useState('');const [messages,setMessages]=useState<Message[]>([{role:'assistant',text:'Ask a research question. I will inspect indexed public records and show the evidence path. Demo nodes are visual samples only.'}]);
+  const [avatarState,setAvatarState]=useState<AvatarState>('idle');const [speechLevel,setSpeechLevel]=useState(0);const [voiceMode,setVoiceMode]=useState(false);const [muted,setMuted]=useState(true);const [volume,setVolume]=useState(.8);const [busy,setBusy]=useState(false);const [activeStep,setActiveStep]=useState('Standby');
+  const [animate,setAnimate]=useState(true);const systemReduced=useReducedMotion();const reducedMotion=systemReduced||!animate;
+  const abortRef=useRef<AbortController|null>(null);const recognitionRef=useRef<SpeechRecognitionLike|null>(null);const chatEnd=useRef<HTMLDivElement>(null);
+
+  const refresh=useCallback(async()=>{try{const [g,s]=await Promise.all([fetch('/api/graph'),fetch('/api/status')]);if(!g.ok||!s.ok)throw new Error('offline');setData(await g.json());setStatus(await s.json());setApiOnline(true)}catch{setApiOnline(false)}},[]);
+  useEffect(()=>{refresh();const t=window.setInterval(refresh,30000);return()=>window.clearInterval(t)},[refresh]);
+  useEffect(()=>{chatEnd.current?.scrollIntoView({behavior:'smooth',block:'nearest'})},[messages]);
+  useEffect(()=>()=>{abortRef.current?.abort();recognitionRef.current?.stop();window.speechSynthesis?.cancel()},[]);
+  const entity=useMemo(()=>data.nodes.find(n=>n.id===selected),[data,selected]);
+  const entityEvidence=useMemo(()=>Object.values(data.evidence).filter((e):e is Evidence=>Boolean(entity?.source_record_id && e.source_record_id===entity.source_record_id)),[data,entity]);
+  const activeNodes=data.nodes.filter(n=>visibleKinds.has(n.kind)).length;
+  const kinds=Object.keys(kindLabels).filter(k=>data.nodes.some(n=>n.kind===k));
+  const realCount=data.nodes.filter(n=>!n.demo).length;
+
+  const submit=async(value=prompt)=>{
+    const q=value.trim();if(!q||busy)return;setPrompt('');setMessages(m=>[...m,{role:'user',text:q}]);setBusy(true);setAvatarState('thinking');setActiveStep('Planning investigation');setHighlighted(new Set());
+    const controller=new AbortController();abortRef.current=controller;
+    try{
+      const response=await fetch('/api/investigate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q}),signal:controller.signal});
+      if(!response.ok||!response.body)throw new Error('Research service unavailable');
+      const reader=response.body.getReader(),decoder=new TextDecoder();let buffer='';let streaming=false;
+      while(true){const {done,value}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});let cut;
+        while((cut=buffer.indexOf('\n\n'))>=0){const raw=buffer.slice(0,cut);buffer=buffer.slice(cut+2);const name=raw.match(/^event: (.+)$/m)?.[1],payload=raw.match(/^data: (.+)$/m)?.[1];if(!name||!payload)continue;const evt=JSON.parse(payload);
+          if(name==='agent.activated'){setActiveStep(`${evt.agent} active`);setAvatarState('thinking')}
+          if(name==='source.search.started'){setActiveStep('Searching indexed sources');setAvatarState('retrieving')}
+          if(name==='entity.matched'){setHighlighted(p=>new Set([...p,evt.entity_id]));setSelected(evt.entity_id)}
+          if(name==='graph.path.selected'){setHighlighted(new Set(evt.entity_ids))}
+          if(name==='analysis.started'){setActiveStep('Checking evidence coverage')}
+          if(name==='agent.error'){setActiveStep(`Agent error: ${evt.error}`)}
+          if(name==='response.streaming'){if(!streaming){streaming=true;setMessages(m=>[...m,{role:'assistant',text:evt.text}])}else setMessages(m=>m.map((message,index)=>index===m.length-1?{...message,text:message.text+evt.text}:message))}
+          if(name==='investigation.completed'){
+            setMessages(m=>streaming?m.map((message,index)=>index===m.length-1?{...message,text:evt.answer,citations:evt.citations}:message):[...m,{role:'assistant',text:evt.answer,citations:evt.citations}]);setActiveStep(`${evt.citations.length} cited records`);setBusy(false);
+            if(voiceMode&&!muted){setAvatarState('speaking');speak(evt.answer,setSpeechLevel,()=>setAvatarState('idle'),volume)}else setAvatarState('idle');
+          }
+        }
+      }
+    }catch(error){if(controller.signal.aborted)return;setMessages(m=>[...m,{role:'assistant',text:error instanceof Error?error.message:'Investigation failed'}]);setAvatarState('error');setActiveStep('Investigation failed');setBusy(false)}
+  };
+  const stop=()=>{abortRef.current?.abort();recognitionRef.current?.stop();window.speechSynthesis?.cancel();setSpeechLevel(0);setBusy(false);setAvatarState('interrupted');setActiveStep('Interrupted')};
+  const microphone=()=>{
+    if(avatarState==='listening'){recognitionRef.current?.stop();setAvatarState('idle');return}
+    const w=window as typeof window & {SpeechRecognition?:new()=>SpeechRecognitionLike;webkitSpeechRecognition?:new()=>SpeechRecognitionLike};
+    const Recognition=w.SpeechRecognition||w.webkitSpeechRecognition;
+    if(!Recognition){setActiveStep('Speech recognition unavailable in this browser');return}
+    stop();const recognition=new Recognition();recognitionRef.current=recognition;
+    recognition.onresult=e=>{const text=e.results[0][0].transcript;setPrompt(text);setAvatarState('thinking');submit(text)};
+    recognition.onerror=()=>{setAvatarState('error');setActiveStep('Microphone request failed')};
+    recognition.onend=()=>setAvatarState(s=>s==='listening'?'idle':s);
+    recognition.start();setAvatarState('listening');setActiveStep('Listening');
+  };
+  const trendOption={animation:!reducedMotion,grid:{left:5,right:5,top:10,bottom:4,containLabel:false},xAxis:{type:'category',show:false,data:['01','02','03','04','05','06','07','08','09','10','11','12']},yAxis:{type:'value',show:false},series:[{type:'line',smooth:.35,showSymbol:false,data:[18,22,21,35,29,37,34,44,42,49,47,56],lineStyle:{color:'#3cc8e9',width:2},areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(54,187,223,.24)'},{offset:1,color:'rgba(54,187,223,0)'}]}}}],tooltip:{show:false}};
+
+  return <div className="shell">
+    <header className="topbar"><div className="brand"><div className="brand-icon"><BrainCircuit size={24}/></div><div><strong>NEUROMESH <em>AI</em></strong><small>THE LIVING INTELLIGENCE OBSERVATORY</small></div></div>
+      <nav className="nav" aria-label="Main navigation">{NAV.map(item=><button key={item} className={page===item?'active':''} onClick={()=>setPage(item)}>{item}</button>)}</nav>
+      <div className="top-actions"><span className={`system-pill ${apiOnline?'online':'offline'}`}><i/>{apiOnline?'SYSTEM ONLINE':'LOCAL PREVIEW'}</span><button className="icon-button" title="Settings" onClick={()=>setAnimate(a=>!a)}><Settings2 size={17}/></button></div>
+    </header>
+    {page==='Observatory'?<main className="observatory">
+      <aside className="left-rail"><div className="rail-section"><div className="section-title"><span>DATA SOURCES</span><Database size={14}/></div><p className="section-intro">Approved public endpoints</p>
+      {[['OpenAlex','openalex','RESEARCH'],['GitHub','github','OPEN SOURCE'],['Hugging Face','huggingface','MODELS'],['NIH RePORTER','nih','FUNDING']].map(([label,key,type])=>{const source=status.sources.find(s=>s.source===key);return <div className="source-row" key={key}><span className={`source-icon ${key}`}>{label.slice(0,1)}</span><div><strong>{label}</strong><small>{type}</small></div><span className={`source-state ${source?'synced':''}`}>{source?`${source.records} indexed`:'Not synced'}</span></div>})}</div>
+      <div className="rail-section"><div className="section-title"><span>AGENT RUNTIME</span><Activity size={14}/></div><div className="agent-card"><span className="agent-orb"/><div><strong>Research Agent</strong><small>{status.configured_adk?'ADK configured':'Local evidence mode'}</small></div><span className="agent-mark">{busy?'●':'○'}</span></div><div className="agent-card"><span className="agent-orb teal"/><div><strong>Ingestion Agent</strong><small>On demand / bounded APIs</small></div><span className="agent-mark">○</span></div><div className="agent-card"><span className="agent-orb violet"/><div><strong>Verification</strong><small>Provenance checks</small></div><span className="agent-mark">○</span></div></div>
+      <div className="rail-section pipeline"><div className="section-title"><span>PIPELINE ACTIVITY</span><GitBranch size={14}/></div>{status.jobs.length?status.jobs.slice(0,3).map(job=><div className="pipeline-row" key={job.id}><span className={job.state==='completed'?'pip-ok':'pip-bad'}>●</span><div><strong>{job.source}</strong><small>{job.state} · {job.records} records</small></div></div>):<p className="empty-note">No ingestion jobs yet. Use the admin sync endpoint to collect public records.</p>}</div>
+      <div className="rail-footer"><div className="rail-line"><span>DATA MODE</span><b>{data.mode.toUpperCase()}</b></div><div className="rail-line"><span>GRAPH RENDERER</span><b>WEBGL</b></div><div className="rail-line"><span>EVENT STREAM</span><b>{apiOnline?'READY':'OFFLINE'}</b></div></div></aside>
+      <section className="main-area"><div className="graph-header"><div><div className="eyebrow"><span className="live-dot"/> LIVE KNOWLEDGE GRAPH <span className="divider">/</span> OBSERVATORY 01</div><h1>Intelligence, in motion<span>.</span></h1><p>Explore the relationships shaping artificial intelligence research.</p></div><div className="graph-top-right"><span className="dataset-badge">{data.mode==='demo'?'DEMONSTRATION DATA':'PUBLIC RECORDS + DEMO'}</span><span className="timestamp">GRAPH VIEW / PRESENT</span></div></div>
+      <div className="graph-stage"><GraphScene data={data} selected={selected} onSelect={id=>setSelected(id||null)} query={query} visibleKinds={visibleKinds} visibleEdges={visibleEdges} highlighted={highlighted} paused={paused} reducedMotion={reducedMotion} mode2d={mode2d} resetSignal={resetSignal}/>
+        <div className="graph-vignette"/><div className="graph-overlay top-left"><div className="graph-status"><span className="crosshair">✳</span><div><strong>NEURAL FIELD ACTIVE</strong><small>{activeNodes} visible entities · {data.edges.length} relationships</small></div></div></div>
+        <div className="graph-controls"><label><Search size={15}/><input aria-label="Search graph entities" placeholder="Search entities" value={query} onChange={e=>setQuery(e.target.value)}/></label><button aria-label="Filter graph" className={filterOpen?'selected':''} onClick={()=>setFilterOpen(v=>!v)}><Filter size={15}/></button>{filterOpen&&<div className="filter-menu"><span>ENTITY TYPES</span>{kinds.map(kind=><label key={kind}><input type="checkbox" checked={visibleKinds.has(kind)} onChange={()=>setVisibleKinds(prev=>{const next=new Set(prev);next.has(kind)?next.delete(kind):next.add(kind);return next})}/><i style={{background:kindColors[kind]}}/>{kindLabels[kind]}</label>)}<span>RELATIONSHIPS</span>{[...new Set(data.edges.map(e=>e.kind))].map(kind=><label key={kind}><input type="checkbox" checked={visibleEdges.has(kind)} onChange={()=>setVisibleEdges(prev=>{const next=new Set(prev);next.has(kind)?next.delete(kind):next.add(kind);return next})}/>{kind.replaceAll('_',' ')}</label>)}</div>}</div>
+        <div className="graph-overlay bottom-left"><div className="coordinate">X 34.82 &nbsp; Y 12.06 &nbsp; Z 08.41</div><div className="legend">{kinds.slice(0,6).map(k=><span key={k}><i style={{background:kindColors[k]}}/>{kindLabels[k]}</span>)}</div></div>
+        <div className="graph-toolbar"><button title={paused?'Resume physics':'Pause physics'} onClick={()=>setPaused(p=>!p)}>{paused?<Play size={17}/>:<Pause size={17}/>}</button><button title="Reset camera" onClick={()=>setResetSignal(n=>n+1)}><RotateCcw size={17}/></button><button title="Switch 2D or 3D" onClick={()=>setMode2d(v=>!v)}><Layers3 size={17}/><span>{mode2d?'2D':'3D'}</span></button><button title="Focus selected" onClick={()=>setResetSignal(n=>n+1)}><Focus size={17}/></button></div>
+        {entity&&<div className="entity-inspector"><button className="close-inspector" aria-label="Close entity details" onClick={()=>setSelected(null)}><X size={15}/></button><span className="inspector-kind" style={{color:kindColors[entity.kind]}}>{entity.kind.replaceAll('_',' ')}</span><h3>{entity.label}</h3><p>{entity.description}</p><div className="inspector-divider"/><span className="inspector-evidence">{entity.demo?'DEMONSTRATION ENTITY':`${entityEvidence.length} EVIDENCE LINKS`}</span>{entityEvidence.map((ev,i)=><a key={i} href={ev.url} target="_blank" rel="noreferrer">{ev.excerpt} ↗</a>)}{!entity.demo&&!entityEvidence.length&&<p>Source record indexed; no verified edge extracted.</p>}</div>}
+      </div>
+      <div className="bottom-grid"><div className="metric-panel trend"><div className="panel-heading"><span>RESEARCH TRENDS</span><span className="demo-mini">VISUAL SAMPLE</span></div><div className="trend-body"><div><b>Activity signal</b><small>Illustrative curve</small></div><ReactECharts option={trendOption} style={{height:72,width:'55%'}} opts={{renderer:'canvas'}}/></div></div><div className="metric-panel"><div className="panel-heading"><span>GRAPH METRICS</span><GitBranch size={14}/></div><div className="metric-value">{status.counts.entities.toLocaleString()} <small>entities</small></div><div className="metric-sub">{status.counts.relationships.toLocaleString()} edges · {realCount} public records</div></div><div className="metric-panel"><div className="panel-heading"><span>RESEARCH COVERAGE</span><Activity size={14}/></div><div className="coverage-bars"><span style={{width:`${Math.min(100,realCount/2)}%`}}/></div><div className="metric-sub">{realCount?`${realCount} real records indexed`:'Awaiting public source ingestion'}</div></div><div className="metric-panel"><div className="panel-heading"><span>ACTIVE INVESTIGATION</span><AudioLines size={14}/></div><div className="investigation-state"><i className={busy?'pulse':''}/>{activeStep}</div><div className="metric-sub">Structured backend events</div></div></div>
+      </section>
+      <aside className={`right-rail ${chatOpen?'':'collapsed'}`}><Hologram state={avatarState} speechLevel={speechLevel} reducedMotion={reducedMotion}/><div className="assistant-heading"><div><div className="eyebrow">RESEARCH INTERFACE</div><h2>Ask NeuroMesh</h2></div><button className="icon-button" aria-label="Toggle conversation" onClick={()=>setChatOpen(v=>!v)}><ChevronDown size={17}/></button></div>{chatOpen&&<><div className="conversation"><div className="conversation-intro"><span className="intro-icon"><BrainCircuit size={19}/></span><div><strong>Evidence-first research</strong><p>Investigations traverse indexed public records. Source links accompany every finding.</p></div></div>{messages.map((m,i)=><div className={`message ${m.role}`} key={i}><span className="message-label">{m.role==='user'?'YOU':'NEUROMESH'}</span><p>{m.text}</p>{m.citations?.length?<div className="citations"><strong>SOURCES / {m.citations.length}</strong>{m.citations.map((c,j)=><a key={j} href={c.url} target="_blank" rel="noreferrer">{j+1}. {c.label} <span>↗</span></a>)}</div>:null}</div>)}<div ref={chatEnd}/></div><div className="chat-bottom"><div className="suggestions"><button onClick={()=>submit('Show indexed AI agent research')}>AI agent research</button><button onClick={()=>submit('Find public funding records')}>Public funding</button></div><form onSubmit={e=>{e.preventDefault();submit()}}><input aria-label="Research question" placeholder="Ask about AI research..." value={prompt} onChange={e=>setPrompt(e.target.value)} /><button type="submit" title="Send question" disabled={busy||!prompt.trim()}><Send size={17}/></button></form><div className="voice-controls"><button title={avatarState==='listening'?'Stop microphone':'Enable microphone'} onClick={microphone}>{avatarState==='listening'?<MicOff size={15}/>:<Mic size={15}/>}<span>{avatarState==='listening'?'Listening':'Microphone'}</span></button><button title="Toggle voice mode" onClick={()=>setVoiceMode(v=>!v)} className={voiceMode?'selected':''}><AudioLines size={15}/><span>{voiceMode?'Voice on':'Text mode'}</span></button><button title={muted?'Unmute assistant':'Mute assistant'} onClick={()=>setMuted(v=>!v)}>{muted?<VolumeX size={15}/>:<Volume2 size={15}/>}</button><button title="Stop speaking or investigating" onClick={stop}><X size={15}/></button></div><div className="volume-line"><span>OUTPUT</span><input aria-label="Voice volume" type="range" min="0" max="1" step="0.1" value={volume} onChange={e=>setVolume(Number(e.target.value))}/><span>{Math.round(volume*100)}%</span></div></div></>}
+      </aside>
+    </main>:<main className="subpage"><div className="subpage-heading"><div className="eyebrow">NEUROMESH / {page.toUpperCase()}</div><h1>{page}<span>.</span></h1><p>{page==='Research'?'Explore source-backed public records.':page==='LLM Lab'?'Provider evaluations appear here after configured runs.':page==='Experiments'?'Reproducible research protocols and runs.':page==='Agents'?'Agent execution and tool activity.':page==='Pipelines'?'Public API synchronization and validation history.':page==='Analytics'?'Measurements computed from the indexed graph.':'Evidence-backed investigation reports.'}</p></div><div className="subpage-cards"><div className="subpage-card"><span className="eyebrow">CURRENT STATE</span><h2>{page==='Pipelines'?`${status.jobs.length} ingestion jobs`:page==='Research'?`${realCount} public records`:'Awaiting measured data'}</h2><p>{page==='Research'?'Use the Observatory to inspect entities and their source links.':'This section is scaffolded for the next milestone; no fabricated rankings or measurements are shown.'}</p></div><div className="subpage-card"><span className="eyebrow">RELEASE STATUS</span><h2>Foundation build</h2><p>See the README for implemented features, validation, and limitations.</p></div></div></main>}
+    <footer className="statusbar"><span><i/> NEUROMESH / RESEARCH ENVIRONMENT</span><span>{data.mode==='demo'?'SEEDED DEMONSTRATION GRAPH':'PUBLIC RECORDS INDEXED'} · BUILD 0.1.0</span><span>© 2026 NEUROMESH AI</span></footer>
+  </div>;
+}
