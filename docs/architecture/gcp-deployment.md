@@ -12,7 +12,7 @@ gcloud config set project moesautomationweekly
 cd infrastructure/terraform
 terraform init
 terraform validate
-terraform plan -var project_id=moesautomationweekly -var deploy_app=true -var image=us-central1-docker.pkg.dev/moesautomationweekly/neuromesh/observatory@sha256:8b23fc6e27e098bf28e1b7cacbc8ca209a7c8e2e8fe70576246a853b0322a9a1 -var enable_adk=true -var model_id=gemini-3.5-flash-lite -var model_location=global -var enable_cloud_tts=true
+terraform plan -var project_id=moesautomationweekly -var deploy_app=true -var image=us-central1-docker.pkg.dev/moesautomationweekly/neuromesh/observatory@sha256:62f416498436f3861e21e161341d37f8aec0f4db60796f4829dcf5e23a691b97 -var enable_adk=true -var model_id=gemini-3.5-flash-lite -var model_location=global -var enable_cloud_tts=true
 ```
 
 An empty state originally showed 14 additions and zero changes or deletions. The live state now includes an additional repository-scoped Cloud Build writer grant; the repeat plan above should show **zero changes**. The SQL instance is deletion protected and explicitly uses Cloud SQL Enterprise edition, required for `db-f1-micro` on PostgreSQL 16. Store Terraform state privately; it contains generated database and operator secrets. The local state and backup files are ignored by Git and restricted to the owner. Before repeated team use, migrate state to a private encrypted backend with limited access.
@@ -32,7 +32,7 @@ This creates a dedicated database, repository, service account, Secret Manager e
 From the repository root, use the repository URI from Terraform output. Build the multi-stage Dockerfile with Cloud Build, then use the pushed digest for Terraform deployment:
 
 ```bash
-IMAGE=us-central1-docker.pkg.dev/moesautomationweekly/neuromesh/observatory:0.2.1
+IMAGE=us-central1-docker.pkg.dev/moesautomationweekly/neuromesh/observatory:0.2.2
 gcloud builds submit --project moesautomationweekly --config cloudbuild.yaml --substitutions=_IMAGE=$IMAGE .
 cd infrastructure/terraform
 terraform plan -var project_id=moesautomationweekly -var deploy_app=true -var image=IMAGE_DIGEST_URI

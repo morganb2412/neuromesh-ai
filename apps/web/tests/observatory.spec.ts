@@ -22,3 +22,25 @@ test('research and analytics show indexed measurements', async ({page})=>{
   await expect(page.getByText('TF-IDF / PUBLIC RECORD TITLES')).toBeVisible();
   await expect(page.getByText('Dataset SHA-256:')).toBeVisible();
 });
+
+test('first microphone turn automatically enables spoken reply', async ({page})=>{
+  await page.addInitScript(()=>{
+    const state=window as any;
+    class FakeRecognition{
+      onresult: ((event:any)=>void)|null=null; onerror:null=null; onend:(()=>void)|null=null;
+      start(){setTimeout(()=>{this.onresult?.({results:[[ {transcript:state.__fakeTranscript} ]]});this.onend?.()},100)}
+      stop(){}
+    }
+    Object.defineProperty(window,'SpeechRecognition',{value:FakeRecognition,configurable:true});
+    Object.defineProperty(window,'webkitSpeechRecognition',{value:FakeRecognition,configurable:true});
+    Object.defineProperty(window,'speechSynthesis',{value:{cancel(){},speak(utterance:any){state.__spokenText=utterance.text;utterance.onstart?.();setTimeout(()=>utterance.onend?.(),1500)}},configurable:true});
+  });
+  await page.goto('/');
+  const title=await page.evaluate(async()=>{const graph=await (await fetch('/api/graph')).json();return graph.nodes.find((n:any)=>!n.demo&&n.source_record_id)?.label});
+  expect(title).toBeTruthy();
+  await page.evaluate(value=>(window as any).__fakeTranscript=`Find evidence about ${value}`,title);
+  await page.getByRole('button',{name:'Talk to NeuroMesh'}).click();
+  await expect(page.locator('.message.user')).toContainText(title);
+  await expect(page.getByTitle('Toggle voice mode')).toContainText('Voice on');
+  await expect.poll(()=>page.evaluate(()=>(window as any).__spokenText||''),{timeout:15000}).not.toBe('');
+});
