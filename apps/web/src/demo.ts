@@ -7,4 +7,4 @@ export const fallbackGraph: GraphData = (() => {
   const edges = nodes.flatMap((n, i) => [1, 2].map(j => ({ id: `demo-edge-${i}-${j}`, source_id: n.id, target_id: nodes[(i + j * 6) % nodes.length].id, kind: 'DEMO_ASSOCIATION', confidence: 'similarity', evidence_id: null, demo: 1 })));
   return { nodes, edges, evidence: {}, mode: 'demo' };
 })();
-export const fallbackStatus: Status = { counts: { entities: 144, relationships: 288, source_records: 0, evidence: 0 }, jobs: [], sources: [], configured_adk: false, mode: 'demo' };
+export const fallbackStatus: Status = { counts: { entities: 144, relationships: 288, source_records: 0, evidence: 0 }, jobs: [], sources: [], configured_adk: false, configured_tts: false, mode: 'demo' };

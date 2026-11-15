@@ -53,28 +53,36 @@ def normalize_nih(x):
 def persist_records(records, query='artificial intelligence'):
     with connect() as db:
         topic_id = 'topic:' + hashlib.sha256(query.casefold().encode()).hexdigest()[:16]
-        db.execute('INSERT OR IGNORE INTO entities(id,label,kind,description,demo) VALUES(?,?,?,?,0)',
+        db.execute('INSERT INTO entities(id,label,kind,description,demo) VALUES(?,?,?,?,0) ON CONFLICT(id) DO NOTHING',
                    (topic_id, query, 'SCIENTIFIC_TOPIC', 'Collection query; links below require literal title evidence.'))
         for item in records:
             raw = json.dumps(item['payload'], separators=(',', ':'))
-            db.execute('INSERT OR REPLACE INTO source_records(id,source,source_url,title,published_at,payload_json) VALUES(?,?,?,?,?,?)',
+            db.execute('''INSERT INTO source_records(id,source,source_url,title,published_at,payload_json) VALUES(?,?,?,?,?,?)
+                       ON CONFLICT(id) DO UPDATE SET source=excluded.source,source_url=excluded.source_url,
+                       title=excluded.title,published_at=excluded.published_at,payload_json=excluded.payload_json''',
                        (item['id'], item['source'], item['url'], item['title'], item['date'], raw))
             eid = 'entity:' + hashlib.sha256(item['id'].encode()).hexdigest()[:16]
-            db.execute('INSERT OR REPLACE INTO entities(id,label,kind,description,source_record_id,demo) VALUES(?,?,?,?,?,0)',
+            db.execute('''INSERT INTO entities(id,label,kind,description,source_record_id,demo) VALUES(?,?,?,?,?,0)
+                       ON CONFLICT(id) DO UPDATE SET label=excluded.label,kind=excluded.kind,
+                       description=excluded.description,source_record_id=excluded.source_record_id,demo=0''',
                        (eid, item['title'], item['kind'], f"Public {item['source']} record", item['id']))
             evidence_id = 'evidence:' + hashlib.sha256(item['id'].encode()).hexdigest()[:16]
-            db.execute('INSERT OR REPLACE INTO evidence(id,source_record_id,excerpt,url) VALUES(?,?,?,?)',
+            db.execute('''INSERT INTO evidence(id,source_record_id,excerpt,url) VALUES(?,?,?,?)
+                       ON CONFLICT(id) DO UPDATE SET source_record_id=excluded.source_record_id,
+                       excerpt=excluded.excerpt,url=excluded.url''',
                        (evidence_id, item['id'], item['title'], item['url']))
             if query.casefold() in item['title'].casefold():
                 edge_id = 'edge:' + hashlib.sha256((item['id'] + query.casefold()).encode()).hexdigest()[:16]
-                db.execute('INSERT OR REPLACE INTO relationships(id,source_id,target_id,kind,confidence,evidence_id,demo) VALUES(?,?,?,?,?,?,0)',
+                db.execute('''INSERT INTO relationships(id,source_id,target_id,kind,confidence,evidence_id,demo) VALUES(?,?,?,?,?,?,0)
+                           ON CONFLICT(id) DO UPDATE SET source_id=excluded.source_id,target_id=excluded.target_id,
+                           kind=excluded.kind,confidence=excluded.confidence,evidence_id=excluded.evidence_id,demo=0''',
                            (edge_id, eid, topic_id, 'MENTIONS', 'verified', evidence_id))
     return len(records)
 
 
 async def synchronize(source, query='artificial intelligence', limit=12):
     with connect() as db:
-        job = db.execute('INSERT INTO ingestion_jobs(source,state) VALUES(?,?)', (source, 'running')).lastrowid
+        job = db.execute('INSERT INTO ingestion_jobs(source,state) VALUES(?,?) RETURNING id', (source, 'running')).fetchone()['id']
     try:
         records = await fetch_source(source, query, limit)
         count = persist_records(records, query)

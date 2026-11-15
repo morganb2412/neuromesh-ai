@@ -16,3 +16,9 @@ test-results/
 .DS_Store
 *.tsbuildinfo
 *.egg-info/
+.local/
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json

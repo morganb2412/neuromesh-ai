@@ -3,6 +3,8 @@ import { Activity, AudioLines, BrainCircuit, ChevronDown, CircleHelp, Database, 
 import ReactECharts from 'echarts-for-react';
 import { GraphScene } from './GraphScene';
 import { Hologram } from './Hologram';
+import { WorkspacePages } from './WorkspacePages';
+import { startCloudSpeech } from './cloudSpeech';
 import { fallbackGraph, fallbackStatus } from './demo';
 import type { AvatarState, Evidence, GraphData, Status } from './types';
 
@@ -15,14 +17,15 @@ type SpeechRecognitionLike={start:()=>void;stop:()=>void;onresult:((e:{results:{
 
 function useReducedMotion(){const [reduced,setReduced]=useState(window.matchMedia('(prefers-reduced-motion: reduce)').matches);useEffect(()=>{const q=window.matchMedia('(prefers-reduced-motion: reduce)');const f=()=>setReduced(q.matches);q.addEventListener('change',f);return()=>q.removeEventListener('change',f)},[]);return reduced;}
 
-function speak(text:string,onLevel:(v:number)=>void,onDone:()=>void,volume:number){
-  if(!('speechSynthesis' in window)){onDone();return;}
+function speak(text:string,onLevel:(v:number)=>void,onDone:()=>void,volume:number):()=>void{
+  if(!('speechSynthesis' in window)){onDone();return()=>{};}
   window.speechSynthesis.cancel();
   const utterance=new SpeechSynthesisUtterance(text);utterance.rate=.96;utterance.pitch=.76;utterance.volume=volume;
-  let timer=0;utterance.onstart=()=>{onLevel(.18)};
+  let timer=0,stopped=false;utterance.onstart=()=>{onLevel(.18)};
   utterance.onboundary=(e)=>{if(e.name==='word'){onLevel(Math.min(1,.45+String(text.slice(e.charIndex).split(/\s/)[0]).length*.035));window.clearTimeout(timer);timer=window.setTimeout(()=>onLevel(.12),170)}};
-  utterance.onend=()=>{window.clearTimeout(timer);onLevel(0);onDone()};utterance.onerror=()=>{window.clearTimeout(timer);onLevel(0);onDone()};
+  utterance.onend=()=>{window.clearTimeout(timer);onLevel(0);if(!stopped)onDone()};utterance.onerror=()=>{window.clearTimeout(timer);onLevel(0);if(!stopped)onDone()};
   window.speechSynthesis.speak(utterance);
+  return()=>{stopped=true;window.clearTimeout(timer);window.speechSynthesis.cancel();onLevel(0)};
 }
 
 export default function App(){
@@ -33,12 +36,14 @@ export default function App(){
   const [chatOpen,setChatOpen]=useState(true);const [prompt,setPrompt]=useState('');const [messages,setMessages]=useState<Message[]>([{role:'assistant',text:'Ask a research question. I will inspect indexed public records and show the evidence path. Demo nodes are visual samples only.'}]);
   const [avatarState,setAvatarState]=useState<AvatarState>('idle');const [speechLevel,setSpeechLevel]=useState(0);const [voiceMode,setVoiceMode]=useState(false);const [muted,setMuted]=useState(true);const [volume,setVolume]=useState(.8);const [busy,setBusy]=useState(false);const [activeStep,setActiveStep]=useState('Standby');
   const [animate,setAnimate]=useState(true);const systemReduced=useReducedMotion();const reducedMotion=systemReduced||!animate;
-  const abortRef=useRef<AbortController|null>(null);const recognitionRef=useRef<SpeechRecognitionLike|null>(null);const chatEnd=useRef<HTMLDivElement>(null);
+  const [settingsOpen,setSettingsOpen]=useState(false);const [operatorToken,setOperatorToken]=useState('');const [syncing,setSyncing]=useState(false);
+  const abortRef=useRef<AbortController|null>(null);const recognitionRef=useRef<SpeechRecognitionLike|null>(null);const chatEnd=useRef<HTMLDivElement>(null);const speechStopRef=useRef<(()=>void)|null>(null);
 
   const refresh=useCallback(async()=>{try{const [g,s]=await Promise.all([fetch('/api/graph'),fetch('/api/status')]);if(!g.ok||!s.ok)throw new Error('offline');setData(await g.json());setStatus(await s.json());setApiOnline(true)}catch{setApiOnline(false)}},[]);
+  const syncSources=async()=>{if(!operatorToken||syncing)return;setSyncing(true);try{for(const source of ['openalex','github','huggingface','nih']){setActiveStep(`Synchronizing ${source}`);const response=await fetch('/api/admin/sync',{method:'POST',headers:{'Content-Type':'application/json','X-Admin-Token':operatorToken},body:JSON.stringify({source,query:'artificial intelligence',limit:8})});if(!response.ok)throw new Error(`${source} sync failed (${response.status})`)}await refresh();setActiveStep('Public sources synchronized')}catch(error){setActiveStep(error instanceof Error?error.message:'Synchronization failed')}finally{setSyncing(false)}};
   useEffect(()=>{refresh();const t=window.setInterval(refresh,30000);return()=>window.clearInterval(t)},[refresh]);
   useEffect(()=>{chatEnd.current?.scrollIntoView({behavior:'smooth',block:'nearest'})},[messages]);
-  useEffect(()=>()=>{abortRef.current?.abort();recognitionRef.current?.stop();window.speechSynthesis?.cancel()},[]);
+  useEffect(()=>()=>{abortRef.current?.abort();recognitionRef.current?.stop();speechStopRef.current?.();window.speechSynthesis?.cancel()},[]);
   const entity=useMemo(()=>data.nodes.find(n=>n.id===selected),[data,selected]);
   const entityEvidence=useMemo(()=>Object.values(data.evidence).filter((e):e is Evidence=>Boolean(entity?.source_record_id && e.source_record_id===entity.source_record_id)),[data,entity]);
   const activeNodes=data.nodes.filter(n=>visibleKinds.has(n.kind)).length;
@@ -49,7 +54,7 @@ export default function App(){
     const q=value.trim();if(!q||busy)return;setPrompt('');setMessages(m=>[...m,{role:'user',text:q}]);setBusy(true);setAvatarState('thinking');setActiveStep('Planning investigation');setHighlighted(new Set());
     const controller=new AbortController();abortRef.current=controller;
     try{
-      const response=await fetch('/api/investigate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q}),signal:controller.signal});
+      const response=await fetch('/api/investigate',{method:'POST',headers:{'Content-Type':'application/json',...(operatorToken?{'X-Admin-Token':operatorToken}:{})},body:JSON.stringify({question:q}),signal:controller.signal});
       if(!response.ok||!response.body)throw new Error('Research service unavailable');
       const reader=response.body.getReader(),decoder=new TextDecoder();let buffer='';let streaming=false;
       while(true){const {done,value}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});let cut;
@@ -63,13 +68,19 @@ export default function App(){
           if(name==='response.streaming'){if(!streaming){streaming=true;setMessages(m=>[...m,{role:'assistant',text:evt.text}])}else setMessages(m=>m.map((message,index)=>index===m.length-1?{...message,text:message.text+evt.text}:message))}
           if(name==='investigation.completed'){
             setMessages(m=>streaming?m.map((message,index)=>index===m.length-1?{...message,text:evt.answer,citations:evt.citations}:message):[...m,{role:'assistant',text:evt.answer,citations:evt.citations}]);setActiveStep(`${evt.citations.length} cited records`);setBusy(false);
-            if(voiceMode&&!muted){setAvatarState('speaking');speak(evt.answer,setSpeechLevel,()=>setAvatarState('idle'),volume)}else setAvatarState('idle');
+            if(voiceMode&&!muted){
+              speechStopRef.current?.();
+              if(operatorToken&&status.configured_tts){
+                setActiveStep('Generating grounded speech');
+                speechStopRef.current=startCloudSpeech(evt.answer,operatorToken,volume,()=>{setAvatarState('speaking');setActiveStep('Speaking')},setSpeechLevel,()=>setAvatarState('idle'),()=>{setAvatarState('speaking');speechStopRef.current=speak(evt.answer,setSpeechLevel,()=>setAvatarState('idle'),volume)});
+              }else{setAvatarState('speaking');speechStopRef.current=speak(evt.answer,setSpeechLevel,()=>setAvatarState('idle'),volume)}
+            }else setAvatarState('idle');
           }
         }
       }
     }catch(error){if(controller.signal.aborted)return;setMessages(m=>[...m,{role:'assistant',text:error instanceof Error?error.message:'Investigation failed'}]);setAvatarState('error');setActiveStep('Investigation failed');setBusy(false)}
   };
-  const stop=()=>{abortRef.current?.abort();recognitionRef.current?.stop();window.speechSynthesis?.cancel();setSpeechLevel(0);setBusy(false);setAvatarState('interrupted');setActiveStep('Interrupted')};
+  const stop=()=>{abortRef.current?.abort();recognitionRef.current?.stop();speechStopRef.current?.();speechStopRef.current=null;window.speechSynthesis?.cancel();setSpeechLevel(0);setBusy(false);setAvatarState('interrupted');setActiveStep('Interrupted')};
   const microphone=()=>{
     if(avatarState==='listening'){recognitionRef.current?.stop();setAvatarState('idle');return}
     const w=window as typeof window & {SpeechRecognition?:new()=>SpeechRecognitionLike;webkitSpeechRecognition?:new()=>SpeechRecognitionLike};
@@ -86,8 +97,9 @@ export default function App(){
   return <div className="shell">
     <header className="topbar"><div className="brand"><div className="brand-icon"><BrainCircuit size={24}/></div><div><strong>NEUROMESH <em>AI</em></strong><small>THE LIVING INTELLIGENCE OBSERVATORY</small></div></div>
       <nav className="nav" aria-label="Main navigation">{NAV.map(item=><button key={item} className={page===item?'active':''} onClick={()=>setPage(item)}>{item}</button>)}</nav>
-      <div className="top-actions"><span className={`system-pill ${apiOnline?'online':'offline'}`}><i/>{apiOnline?'SYSTEM ONLINE':'LOCAL PREVIEW'}</span><button className="icon-button" title="Settings" onClick={()=>setAnimate(a=>!a)}><Settings2 size={17}/></button></div>
+      <div className="top-actions"><span className={`system-pill ${apiOnline?'online':'offline'}`}><i/>{apiOnline?'SYSTEM ONLINE':'LOCAL PREVIEW'}</span><button className="icon-button" title="Settings" onClick={()=>setSettingsOpen(v=>!v)}><Settings2 size={17}/></button></div>
     </header>
+    {settingsOpen&&<div className="settings-panel"><div className="settings-title"><strong>SESSION SETTINGS</strong><button aria-label="Close settings" onClick={()=>setSettingsOpen(false)}><X size={15}/></button></div><label className="settings-check"><input type="checkbox" checked={animate} onChange={e=>setAnimate(e.target.checked)}/> Animate graph and avatar</label><label className="settings-token">OPERATOR TOKEN<input type="password" autoComplete="off" placeholder="Enter for ADK and Cloud voice" value={operatorToken} onChange={e=>setOperatorToken(e.target.value)}/></label><button className="settings-sync" disabled={!operatorToken||syncing} onClick={syncSources}>{syncing?'Synchronizing sources…':'Sync four public sources'}</button><p>Token is held in this tab only. Operator access enables paid model and speech calls when configured; sync uses bounded public APIs.</p></div>}
     {page==='Observatory'?<main className="observatory">
       <aside className="left-rail"><div className="rail-section"><div className="section-title"><span>DATA SOURCES</span><Database size={14}/></div><p className="section-intro">Approved public endpoints</p>
       {[['OpenAlex','openalex','RESEARCH'],['GitHub','github','OPEN SOURCE'],['Hugging Face','huggingface','MODELS'],['NIH RePORTER','nih','FUNDING']].map(([label,key,type])=>{const source=status.sources.find(s=>s.source===key);return <div className="source-row" key={key}><span className={`source-icon ${key}`}>{label.slice(0,1)}</span><div><strong>{label}</strong><small>{type}</small></div><span className={`source-state ${source?'synced':''}`}>{source?`${source.records} indexed`:'Not synced'}</span></div>})}</div>
@@ -106,7 +118,7 @@ export default function App(){
       </section>
       <aside className={`right-rail ${chatOpen?'':'collapsed'}`}><Hologram state={avatarState} speechLevel={speechLevel} reducedMotion={reducedMotion}/><div className="assistant-heading"><div><div className="eyebrow">RESEARCH INTERFACE</div><h2>Ask NeuroMesh</h2></div><button className="icon-button" aria-label="Toggle conversation" onClick={()=>setChatOpen(v=>!v)}><ChevronDown size={17}/></button></div>{chatOpen&&<><div className="conversation"><div className="conversation-intro"><span className="intro-icon"><BrainCircuit size={19}/></span><div><strong>Evidence-first research</strong><p>Investigations traverse indexed public records. Source links accompany every finding.</p></div></div>{messages.map((m,i)=><div className={`message ${m.role}`} key={i}><span className="message-label">{m.role==='user'?'YOU':'NEUROMESH'}</span><p>{m.text}</p>{m.citations?.length?<div className="citations"><strong>SOURCES / {m.citations.length}</strong>{m.citations.map((c,j)=><a key={j} href={c.url} target="_blank" rel="noreferrer">{j+1}. {c.label} <span>↗</span></a>)}</div>:null}</div>)}<div ref={chatEnd}/></div><div className="chat-bottom"><div className="suggestions"><button onClick={()=>submit('Show indexed AI agent research')}>AI agent research</button><button onClick={()=>submit('Find public funding records')}>Public funding</button></div><form onSubmit={e=>{e.preventDefault();submit()}}><input aria-label="Research question" placeholder="Ask about AI research..." value={prompt} onChange={e=>setPrompt(e.target.value)} /><button type="submit" title="Send question" disabled={busy||!prompt.trim()}><Send size={17}/></button></form><div className="voice-controls"><button title={avatarState==='listening'?'Stop microphone':'Enable microphone'} onClick={microphone}>{avatarState==='listening'?<MicOff size={15}/>:<Mic size={15}/>}<span>{avatarState==='listening'?'Listening':'Microphone'}</span></button><button title="Toggle voice mode" onClick={()=>setVoiceMode(v=>!v)} className={voiceMode?'selected':''}><AudioLines size={15}/><span>{voiceMode?'Voice on':'Text mode'}</span></button><button title={muted?'Unmute assistant':'Mute assistant'} onClick={()=>setMuted(v=>!v)}>{muted?<VolumeX size={15}/>:<Volume2 size={15}/>}</button><button title="Stop speaking or investigating" onClick={stop}><X size={15}/></button></div><div className="volume-line"><span>OUTPUT</span><input aria-label="Voice volume" type="range" min="0" max="1" step="0.1" value={volume} onChange={e=>setVolume(Number(e.target.value))}/><span>{Math.round(volume*100)}%</span></div></div></>}
       </aside>
-    </main>:<main className="subpage"><div className="subpage-heading"><div className="eyebrow">NEUROMESH / {page.toUpperCase()}</div><h1>{page}<span>.</span></h1><p>{page==='Research'?'Explore source-backed public records.':page==='LLM Lab'?'Provider evaluations appear here after configured runs.':page==='Experiments'?'Reproducible research protocols and runs.':page==='Agents'?'Agent execution and tool activity.':page==='Pipelines'?'Public API synchronization and validation history.':page==='Analytics'?'Measurements computed from the indexed graph.':'Evidence-backed investigation reports.'}</p></div><div className="subpage-cards"><div className="subpage-card"><span className="eyebrow">CURRENT STATE</span><h2>{page==='Pipelines'?`${status.jobs.length} ingestion jobs`:page==='Research'?`${realCount} public records`:'Awaiting measured data'}</h2><p>{page==='Research'?'Use the Observatory to inspect entities and their source links.':'This section is scaffolded for the next milestone; no fabricated rankings or measurements are shown.'}</p></div><div className="subpage-card"><span className="eyebrow">RELEASE STATUS</span><h2>Foundation build</h2><p>See the README for implemented features, validation, and limitations.</p></div></div></main>}
-    <footer className="statusbar"><span><i/> NEUROMESH / RESEARCH ENVIRONMENT</span><span>{data.mode==='demo'?'SEEDED DEMONSTRATION GRAPH':'PUBLIC RECORDS INDEXED'} · BUILD 0.1.0</span><span>© 2026 NEUROMESH AI</span></footer>
+    </main>:<WorkspacePages page={page} data={data} status={status} operatorToken={operatorToken} onSelect={id=>{setSelected(id);setPage('Observatory')}}/>}
+    <footer className="statusbar"><span><i/> NEUROMESH / RESEARCH ENVIRONMENT</span><span>{data.mode==='demo'?'SEEDED DEMONSTRATION GRAPH':'PUBLIC RECORDS INDEXED'} · BUILD 0.2.0</span><span>© 2026 NEUROMESH AI</span></footer>
   </div>;
 }

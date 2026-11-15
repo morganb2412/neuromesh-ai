@@ -7,7 +7,7 @@ TOPICS = ['Retrieval systems','Agent systems','Foundation models','Evaluation','
 
 
 def seed_demo(db, count=144):
-    if db.execute('SELECT COUNT(*) FROM entities').fetchone()[0]:
+    if db.execute('SELECT COUNT(*) AS n FROM entities WHERE demo=1').fetchone()['n']:
         return
     rng = random.Random(2401)
     for i in range(count):
