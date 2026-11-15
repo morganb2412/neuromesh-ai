@@ -1,49 +1,48 @@
 # NeuroMesh AI
 
-NeuroMesh AI is an open source research workbench for tracing public AI research, funding, models, and software through a 3D evidence graph. It asks how research growth relates to public investment, open source implementation, and documented adoption; it does not treat a search match as proof of a relationship.
+NeuroMesh AI is an open source research workbench for tracing public AI research, funding, models, and software through an interactive 3D evidence graph. Its central question is how research growth relates to public investment, open source implementation, and documented adoption. A search match is never treated as proof of a relationship.
 
 ![NeuroMesh AI Observatory](docs/screenshots/observatory-home.png)
 
-The screenshot is from the running React and FastAPI application. It shows 32 public records collected in a bounded local sync and a separately labeled demonstration graph used to exercise the visualization.
+This is a Playwright screenshot of the running React and FastAPI application. It contains 32 indexed public records from a bounded local sync and a separately labeled visual demonstration layer.
 
-## Current implementation
+## What works today
 
-The Observatory renders animated WebGL points, typed edges, directional particles, camera controls, search, category filtering, selection, and a procedural shadow hologram. The assistant accepts typed questions and streams actual backend retrieval events over Server-Sent Events; matched records light up in the graph and source links appear in the answer. Browser speech recognition and speech synthesis are available where supported, with explicit microphone activation, mute, interruption, volume, and word-boundary-driven jaw motion. The avatar and voice path need more rigorous timing validation before release claims about speech synchronization.
+The Observatory renders an animated WebGL field, typed edges, directional particles, camera controls, search, filters, selection, a source inspector, and a procedural shadow hologram. Typed questions trigger real Server-Sent Events from indexed retrieval. Matched nodes illuminate, and answers include source links. The Research page searches indexed records; Pipelines displays actual ingestion jobs; Analytics shows live graph measurements and deterministic TF-IDF title clusters. Agents displays operator-only execution history when available. LLM Lab, Experiments, and Reports clearly report that no measured runs exist.
 
-The API stores original public records, normalized entities, evidence, edges, ingestion jobs, and investigations in SQLite for local development. OpenAlex, GitHub, Hugging Face, and NIH RePORTER connectors use documented public APIs, bounded page sizes, and source URLs. An authenticated admin endpoint starts syncs. Public investigation calls use local evidence retrieval and have an in-memory rate limit. A configured Google ADK agent may synthesize from a bounded evidence catalog only when an operator supplies an admin token, model, and credentials. No provider model call is made by default.
+Browser speech recognition is available where supported after explicit microphone activation. Browser synthesis uses word-boundary timing. The optional operator-only Google Cloud Text-to-Speech path decodes generated audio in Web Audio and drives the hologram jaw from its PCM amplitude; stopping playback stops the animation. No raw microphone recording is stored by the app. Voice behavior depends on browser permissions and configured cloud access.
 
 ## Architecture
 
 ```text
-Public APIs → bounded connectors → source records + evidence → entities / verified title edges
-                                                      ↓
-React + Three.js ← JSON graph + SSE events ← FastAPI research service
-                                     ↘ deterministic graph analytics
-                                      ↘ optional, admin-only Google ADK synthesis
+Approved public APIs → bounded connectors → records, evidence, entities, typed edges
+                                               ↓
+React / Three.js ← graph JSON + actual SSE events ← FastAPI → PostgreSQL or SQLite
+                                                   ├→ PageRank and TF-IDF analysis
+                                                   ├→ operator-only ADK research → verification
+                                                   └→ operator-only Cloud Text-to-Speech
 ```
 
-See [system architecture](docs/architecture/system.md) for the data path and trust boundaries. The intended production architecture is Cloud Run, Cloud SQL PostgreSQL with pgvector, Cloud Storage, Cloud Run Jobs, Pub/Sub, Scheduler, Secret Manager, and Vertex AI. The present code is a local prototype; the included Terraform is a Cloud Run API preview and does not provide durable persistence.
+See [system architecture](docs/architecture/system.md) for trust boundaries and storage. The Google Cloud target is one capped Cloud Run service serving the React bundle and API, backed by a dedicated Cloud SQL PostgreSQL instance, Artifact Registry, Secret Manager, and a scoped runtime service account. Terraform has been validated but **not applied**.
 
-## Stack
+## Stack and graph semantics
 
-React 19, TypeScript, Vite, React Three Fiber, Three.js, Tailwind CSS, ECharts, FastAPI, SQLite, NetworkX, optional Google ADK, Vitest, Pytest, and Playwright. The main scene uses buffer geometry for entity points, lines, and moving edge particles, plus instanced hit targets. It pauses rendering updates in hidden tabs and honors reduced motion preferences.
+React 19, TypeScript, Vite, React Three Fiber, Three.js, Tailwind CSS, ECharts, FastAPI, SQLite/PostgreSQL, NetworkX, Google ADK, Google Cloud Text-to-Speech, Vitest, Pytest, and Playwright. The scene uses buffer geometry and instanced hit targets, pauses updates in hidden tabs, and honors reduced motion preferences.
 
-## Sources and graph semantics
+Each source record has an external ID, original JSON, URL, and retrieval time. Entities point to source records; relationships have a type, confidence class, optional evidence ID, and demo flag. The current extractor creates a verified `MENTIONS` edge only when a record title literally contains the collection query. Demo edges have no evidence and are never included in live analytics.
 
-| Source | Record type | Current connector |
+| Source | Record type | Connector |
 | --- | --- | --- |
 | [OpenAlex](https://docs.openalex.org/) | Publications | Works search |
 | [GitHub](https://docs.github.com/en/rest/search) | Repositories | Repository search |
 | [Hugging Face Hub](https://huggingface.co/docs/hub/api) | Models | Public models API |
 | [NIH RePORTER](https://api.reporter.nih.gov/) | Public awards | Project search v2 |
 
-Entities have an ID, type, label, source record, and demo flag. Relationships have a type, confidence class, optional evidence ID, and demo flag. The current extractor creates a `MENTIONS` edge only when a record title literally contains the collection query. That edge is `verified` against a source URL. Search results without a literal match remain unconnected records. Demo edges are marked `similarity` and carry no evidence. Future extractors must preserve the distinction among verified, extracted, inferred, and semantic edges.
+## Agents, analytics, and research method
 
-## Agent orchestration and analysis
+Public investigations use bounded local evidence retrieval. With an operator token, configured Vertex model, and explicit ADK enablement, a Google ADK research agent reads a bounded catalog and a verification agent checks its draft against that catalog. ADK execution events and token counts are recorded; model calls are limited to four per investigation, 60 seconds, and 20 investigations per day by default. Provider calls are off by default. Retrieved text is treated as data, and agent tools cannot execute commands or arbitrary SQL.
 
-The research endpoint emits `investigation.started`, `agent.activated`, `query.planned`, `source.search.*`, `entity.matched`, `graph.path.selected`, `analysis.*`, `response.streaming`, and `investigation.completed` events during actual execution. The default answer is deterministic and explicitly limits its claims. The optional ADK path is configured with a bounded `get_evidence` tool and instructions to cite exact URLs and reject instructions embedded in source text. Agent retries, traces, cost accounting, and a full specialist team remain future work.
-
-`GET /api/analytics` computes connected components, density, and PageRank by deterministic power iteration. It excludes demo nodes by default. This is graph structure analysis, not a result about the primary research question. The [research protocol](docs/research/methodology.md) prespecifies the 2023–2026 hypothesis, lag windows, indicators, missingness checks, and confidence interval plan.
+`GET /api/analytics` computes PageRank, density, and connected components on live nodes. `GET /api/clusters` builds deterministic TF-IDF vectors from source titles, joins records above a fixed cosine threshold, and returns a dataset SHA-256 fingerprint plus source URLs. Title clustering is a lexical baseline, not a scientific relationship result. The [prespecified research protocol](docs/research/methodology.md) defines the 2023–2026 hypothesis, lag windows, missingness checks, and confidence interval plan. **The primary scientific experiment has not run**, and there are no published correlations or model rankings.
 
 ## Local development
 
@@ -58,32 +57,32 @@ python3 -m venv .venv
 npm run dev
 ```
 
-Open `http://127.0.0.1:5173`. The API starts with a clearly labeled seeded graph. To collect public records locally without credentials:
+Open `http://127.0.0.1:5173`. The seeded visual layer is explicitly marked as demonstration data. To index a bounded public sample:
 
 ```bash
 .venv/bin/python scripts/sync_public.py --query 'artificial intelligence' --limit 8
 ```
 
-The script makes at most one bounded request to each of four public APIs and persists original payloads and URLs in `data/neuromesh.db`, which is ignored by Git. To use the admin HTTP sync endpoint, set a long `NEUROMESH_ADMIN_TOKEN` outside the repository and pass it in `X-Admin-Token`. To enable ADK synthesis, also configure `NEUROMESH_ENABLE_ADK=true`, `NEUROMESH_MODEL`, and supported Google credentials. Anonymous visitors cannot trigger model calls.
+The command makes one request to each of four approved public APIs. SQLite lives in ignored `data/neuromesh.db`. To use the operator HTTP endpoints, set a long `NEUROMESH_ADMIN_TOKEN` outside Git and enter it in the Observatory settings. A PostgreSQL URL can be supplied with `NEUROMESH_DATABASE_URL`. The optional `NEUROMESH_ENABLE_ADK`, `NEUROMESH_MODEL`, and `NEUROMESH_ENABLE_CLOUD_TTS` settings require Google credentials and may incur charges.
 
 ## Google Cloud deployment
 
-The preview Dockerfile and Terraform module are in `services/api` and `infrastructure/terraform`. They define one capped Cloud Run API instance in `us-central1`, with ADK disabled. This preview uses ephemeral SQLite and is unsuitable for retained research data. A production deployment requires Cloud SQL integration and migrations, a frontend service, service identities, Secret Manager bindings, scheduled ingestion, and a durable rate limiter. No cloud resource is created by this repository. Review the [cost gate](docs/architecture/costs.md) before enabling billing; the minimum persistent Cloud SQL compute scenario is about $7.67/month before storage and other services.
+Deployment is staged in [Terraform](infrastructure/terraform/main.tf). The module targets the **existing** `moesautomationweekly` project and uses new NeuroMesh-specific names. Stage one creates the image repository, runtime identity, secrets, and a dedicated 10 GiB `db-f1-micro` PostgreSQL instance. Stage two builds and deploys a single max-one-instance Cloud Run service. No existing project service or database is in Terraform state. The verified stage-one plan is **14 additions, 0 changes, 0 deletions**. A detailed runbook is in [GCP deployment](docs/architecture/gcp-deployment.md).
 
-## Testing and observed results
+No GCP resources have been provisioned. Review the [monthly cost estimate and guardrails](docs/architecture/costs.md) before applying Terraform or running Cloud Build. Baseline persistent cost is estimated around $10–$15/month at low traffic, with additional usage charges. ADK and Cloud TTS default to off. Terraform state contains generated secrets and must remain private.
+
+## Tests and observed results
 
 ```bash
 npm run build
 npm test
 .venv/bin/pytest -q services/api/tests
-npm run test:e2e  # with both development servers running
+npm run test:e2e       # with the local API and web servers running
 node scripts/capture_observatory.mjs
 ```
 
-The initial local sync returned eight records from each of the four sources. Browser verification confirmed the homepage, both WebGL canvases, a completed investigation event stream, and zero page errors during screenshot capture. Backend tests cover demo separation, admin gating, citation provenance, bounded investigation behavior, and repeatable graph metrics. These are engineering checks; **the primary scientific experiment has not been run**, so there are no reported correlations or model benchmark results.
+The local four-source sync returned eight records per source. Automated checks cover API authorization, provenance, idempotent ingestion, repeatable graph metrics, deterministic title clusters, PostgreSQL integration, Observatory rendering, a cited investigation, Research navigation, and Analytics display. Playwright captured the screenshot above from the working app with zero page errors. The ADK and paid Cloud voice paths are wired but have not made paid provider calls or passed a deployed integration test.
 
 ## Limitations and next work
 
-The research, LLM Lab, Experiments, Agents, Pipelines, Analytics, and Reports tabs are navigation scaffolds; the Observatory is the implemented workbench. Search is lexical over a small local index. The 3D layout is a seeded cluster and spring simulation; larger graph layout, drag interactions, temporal snapshots, camera guided traversal, and stronger level of detail are pending. Browser speech APIs vary by platform, and word boundaries are not phoneme or amplitude data. The full Google Cloud speech pipeline, durable Postgres and pgvector store, broader ingestion catalog, entity resolution, multi-agent ADK workflow, reproducible primary study, and provider evaluation lab are not implemented.
-
-The next milestone is durable data and richer evidence extraction, followed by voice timing and agent orchestration. No research claim should be published until the prespecified experiment is executed and reviewed.
+The graph still relies on a seeded visual layer to demonstrate density while the live index is small. Search is lexical; only literal title mentions create verified edges. The primary study, broader public connectors, source alias resolution, pgvector embeddings, scheduled jobs, historical snapshots, full experiment runner, provider comparison lab, and durable multi-turn agent context remain incomplete. Browser speech support varies; the Cloud TTS path still requires a deployed integration test. Cloud deployment and ingestion are pending the cost approval required for this project. These gaps are tracked as implementation work, not presented as research results.
