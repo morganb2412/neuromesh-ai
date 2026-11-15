@@ -12,7 +12,7 @@ gcloud config set project moesautomationweekly
 cd infrastructure/terraform
 terraform init
 terraform validate
-terraform plan -var project_id=moesautomationweekly -var deploy_app=true -var image=us-central1-docker.pkg.dev/moesautomationweekly/neuromesh/observatory@sha256:62f416498436f3861e21e161341d37f8aec0f4db60796f4829dcf5e23a691b97 -var enable_adk=true -var model_id=gemini-3.5-flash-lite -var model_location=global -var enable_cloud_tts=true
+terraform plan -var project_id=moesautomationweekly -var deploy_app=true -var image=us-central1-docker.pkg.dev/moesautomationweekly/neuromesh/observatory@sha256:aff2cc1ef3c8df39417570645b50981e2ccf9ddb958ae4227f3b27dd2eb85104 -var enable_adk=true -var model_id=gemini-3.5-flash-lite -var model_location=global -var enable_cloud_tts=true
 ```
 
 An empty state originally showed 14 additions and zero changes or deletions. The live state now includes an additional repository-scoped Cloud Build writer grant; the repeat plan above should show **zero changes**. The SQL instance is deletion protected and explicitly uses Cloud SQL Enterprise edition, required for `db-f1-micro` on PostgreSQL 16. Store Terraform state privately; it contains generated database and operator secrets. The local state and backup files are ignored by Git and restricted to the owner. Before repeated team use, migrate state to a private encrypted backend with limited access.
@@ -32,7 +32,7 @@ This creates a dedicated database, repository, service account, Secret Manager e
 From the repository root, use the repository URI from Terraform output. Build the multi-stage Dockerfile with Cloud Build, then use the pushed digest for Terraform deployment:
 
 ```bash
-IMAGE=us-central1-docker.pkg.dev/moesautomationweekly/neuromesh/observatory:0.2.2
+IMAGE=us-central1-docker.pkg.dev/moesautomationweekly/neuromesh/observatory:0.2.3
 gcloud builds submit --project moesautomationweekly --config cloudbuild.yaml --substitutions=_IMAGE=$IMAGE .
 cd infrastructure/terraform
 terraform plan -var project_id=moesautomationweekly -var deploy_app=true -var image=IMAGE_DIGEST_URI
@@ -50,7 +50,7 @@ The initial Cloud SQL database contained the labeled visual demonstration layer.
 
 The current deployment sets `enable_adk=true`, `model_id=gemini-3.5-flash-lite`, `model_location=global`, and `enable_cloud_tts=true`. The model identifier and endpoint were checked against current Google documentation; verify availability again before changing them. The runtime service account has `roles/aiplatform.user`, and the selected voice is `en-US-Standard-J`, a lower-cost male Standard voice. Both provider endpoints are restricted to operator requests with persistent daily usage reservations. A bounded deployed test passed for both providers, including audio-reactive browser playback and interruption.
 
-The browser microphone path uses browser speech recognition; Cloud TTS supplies generated playback audio and jaw amplitude. Verify the voice path on the deployed URL in a supported browser before describing it as production validated.
+The browser microphone path uses browser speech recognition; Cloud TTS supplies generated playback audio and jaw amplitude. The app retries a premature recognition disconnect twice and reports the browser's error code and device guidance. Browser speech recognition may still fail if Chrome cannot access a working input device or its recognition service. Verify the voice path on the deployed URL with a physical microphone before describing it as production validated.
 
 ## Operational checks
 
