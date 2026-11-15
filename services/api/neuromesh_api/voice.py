@@ -11,7 +11,7 @@ def synthesize(text: str) -> bytes:
     response = client.synthesize_speech(
         input=texttospeech.SynthesisInput(text=text),
         voice=texttospeech.VoiceSelectionParams(
-            language_code='en-US', name=os.getenv('NEUROMESH_VOICE_NAME', 'en-US-Neural2-J')),
+            language_code='en-US', name=os.getenv('NEUROMESH_VOICE_NAME', 'en-US-Standard-J')),
         audio_config=texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.LINEAR16),
     )
     return response.audio_content

@@ -29,7 +29,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title='NeuroMesh AI API', version='0.2.0', lifespan=lifespan)
+app = FastAPI(title='NeuroMesh AI API', version='0.2.1', lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=[os.getenv('NEUROMESH_CORS_ORIGIN', 'http://localhost:5173')],
                    allow_methods=['GET','POST'], allow_headers=['Content-Type','X-Admin-Token'])
 _request_times: dict[str, deque[float]] = defaultdict(deque)

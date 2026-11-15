@@ -234,6 +234,10 @@ resource "google_cloud_run_v2_service" "app" {
         value = tostring(var.enable_cloud_tts)
       }
       env {
+        name  = "NEUROMESH_VOICE_NAME"
+        value = "en-US-Standard-J"
+      }
+      env {
         name  = "NEUROMESH_MODEL"
         value = var.model_id
       }
