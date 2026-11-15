@@ -4,7 +4,7 @@ NeuroMesh AI is an open source research workbench for tracing public AI research
 
 ![NeuroMesh AI Observatory](docs/screenshots/observatory-home.png)
 
-This is a Playwright screenshot of the running React and FastAPI application. It contains 32 indexed public records from a bounded local sync and a separately labeled visual demonstration layer.
+This is a Playwright screenshot of the deployed React and FastAPI application on Google Cloud. It contains 32 indexed public records from a bounded four-source sync and a separately labeled visual demonstration layer.
 
 ## What works today
 
@@ -23,7 +23,7 @@ React / Three.js ← graph JSON + actual SSE events ← FastAPI → PostgreSQL o
                                                    └→ operator-only Cloud Text-to-Speech
 ```
 
-See [system architecture](docs/architecture/system.md) for trust boundaries and storage. The Google Cloud target is one capped Cloud Run service serving the React bundle and API, backed by a dedicated Cloud SQL PostgreSQL instance, Artifact Registry, Secret Manager, and a scoped runtime service account. Terraform has been validated but **not applied**.
+See [system architecture](docs/architecture/system.md) for trust boundaries and storage. The Google Cloud deployment is one capped Cloud Run service serving the React bundle and API, backed by a dedicated Cloud SQL PostgreSQL instance, Artifact Registry, Secret Manager, and a scoped runtime service account.
 
 ## Stack and graph semantics
 
@@ -67,9 +67,9 @@ The command makes one request to each of four approved public APIs. SQLite lives
 
 ## Google Cloud deployment
 
-Deployment is staged in [Terraform](infrastructure/terraform/main.tf). The module targets the **existing** `moesautomationweekly` project and uses new NeuroMesh-specific names. Stage one creates the image repository, runtime identity, secrets, and a dedicated 10 GiB `db-f1-micro` PostgreSQL instance. Stage two builds and deploys a single max-one-instance Cloud Run service. No existing project service or database is in Terraform state. The verified stage-one plan is **14 additions, 0 changes, 0 deletions**. A detailed runbook is in [GCP deployment](docs/architecture/gcp-deployment.md).
+**Live demo:** [NeuroMesh Observatory](https://neuromesh-observatory-wwtovkiwnq-uc.a.run.app/). Deployment is staged in [Terraform](infrastructure/terraform/main.tf). The module targets the **existing** `moesautomationweekly` project and uses new NeuroMesh-specific names. It provisions a dedicated 10 GiB Enterprise `db-f1-micro` PostgreSQL instance, an image repository, runtime identity, secrets, and one max-one-instance Cloud Run service. No preexisting project service or database was modified. A detailed runbook is in [GCP deployment](docs/architecture/gcp-deployment.md).
 
-No GCP resources have been provisioned. Review the [monthly cost estimate and guardrails](docs/architecture/costs.md) before applying Terraform or running Cloud Build. Baseline persistent cost is estimated around $10–$15/month at low traffic, with additional usage charges. ADK and Cloud TTS default to off. Terraform state contains generated secrets and must remain private.
+The deployment has a project-scoped $40 monthly budget alert with notifications at $10, $25, and $40. Review the [monthly cost estimate and guardrails](docs/architecture/costs.md); baseline persistent cost is estimated around $10–$15/month at low traffic, with additional usage charges. ADK and Cloud TTS remain off pending provider usage validation. Terraform state contains generated secrets and must remain private.
 
 ## Tests and observed results
 
@@ -81,8 +81,8 @@ npm run test:e2e       # with the local API and web servers running
 node scripts/capture_observatory.mjs
 ```
 
-The local four-source sync returned eight records per source. Automated checks cover API authorization, provenance, idempotent ingestion, repeatable graph metrics, deterministic title clusters, PostgreSQL integration, Observatory rendering, a cited investigation, Research navigation, and Analytics display. Playwright captured the screenshot above from the working app with zero page errors. The ADK and paid Cloud voice paths are wired but have not made paid provider calls or passed a deployed integration test.
+The cloud four-source sync returned eight records per source. Automated checks cover API authorization, provenance, idempotent ingestion, repeatable graph metrics, deterministic title clusters, PostgreSQL integration, Observatory rendering, a cited investigation, Research navigation, and Analytics display. Playwright verified the public Cloud Run page, 32 research cards, Analytics fingerprint, a cited investigation, and zero page errors; it captured the screenshot above. The ADK and paid Cloud voice paths are wired but have not made paid provider calls or passed a deployed integration test.
 
 ## Limitations and next work
 
-The graph still relies on a seeded visual layer to demonstrate density while the live index is small. Search is lexical; only literal title mentions create verified edges. The primary study, broader public connectors, source alias resolution, pgvector embeddings, scheduled jobs, historical snapshots, full experiment runner, provider comparison lab, and durable multi-turn agent context remain incomplete. Browser speech support varies; the Cloud TTS path still requires a deployed integration test. Cloud deployment and ingestion are pending the cost approval required for this project. These gaps are tracked as implementation work, not presented as research results.
+The graph still relies on a seeded visual layer to demonstrate density while the live index is small. Search is lexical; only literal title mentions create verified edges. The primary study, broader public connectors, source alias resolution, pgvector embeddings, scheduled jobs, historical snapshots, full experiment runner, provider comparison lab, and durable multi-turn agent context remain incomplete. Browser speech support varies; the Cloud TTS and ADK paths still require deployed provider validation. These gaps are tracked as implementation work, not presented as research results.
