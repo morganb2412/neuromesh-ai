@@ -13,10 +13,10 @@ export TF_VAR_ncbi_contact_email="$(git config user.email)"
 cd infrastructure/terraform
 terraform init
 terraform validate
-terraform plan -var project_id=moesautomationweekly -var deploy_app=true -var image=us-central1-docker.pkg.dev/moesautomationweekly/neuromesh/observatory@sha256:dbe6240cb6d98de03e625f1840822f2c6a4d3d209e1fafc042ec481b41e868b8 -var enable_adk=true -var model_id=gemini-3.5-flash-lite -var model_location=global -var enable_cloud_tts=true
+terraform plan -var project_id=moesautomationweekly -var deploy_app=true -var image=us-central1-docker.pkg.dev/moesautomationweekly/neuromesh/observatory@sha256:b24c5e2ab85a11a92f4b01b62335f3cef9d7b22fe22651ca97dc60d6d299bba4 -var enable_adk=true -var model_id=gemini-3.5-flash-lite -var model_location=global -var enable_cloud_tts=true
 ```
 
-An empty state originally showed 14 additions and zero changes or deletions. The live state now includes an additional repository-scoped Cloud Build writer grant. Release 0.3.0 used a saved plan with **0 additions, 1 in-place Cloud Run change, and 0 deletions**; a repeat plan on 2026-11-16 found **no changes**. The SQL instance is deletion protected and explicitly uses Cloud SQL Enterprise edition, required for `db-f1-micro` on PostgreSQL 16. Store Terraform state privately; it contains generated database and operator secrets as well as the NCBI contact email. The local state and backup files are ignored by Git and restricted to the owner. Before repeated team use, migrate state to a private encrypted backend with limited access.
+An empty state originally showed 14 additions and zero changes or deletions. The live state now includes an additional repository-scoped Cloud Build writer grant. Release 0.3.1 used a saved plan with **0 additions, 1 in-place Cloud Run image change, and 0 deletions**. The SQL instance is deletion protected and explicitly uses Cloud SQL Enterprise edition, required for `db-f1-micro` on PostgreSQL 16. Store Terraform state privately; it contains generated database and operator secrets as well as the NCBI contact email. The local state and backup files are ignored by Git and restricted to the owner. Before repeated team use, migrate state to a private encrypted backend with limited access.
 
 ## Stage one: durable infrastructure
 

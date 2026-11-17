@@ -24,7 +24,7 @@ The public interface exposes read-only records, graph evidence, and analytics. R
 - Deterministic parsers normalize identifiers and create relationships only from source fields. Model prose is not persisted as a verified relationship.
 - Browser code receives no provider key. The operator token stays in browser memory and is sent only to protected endpoints.
 - A public visitor can inspect evidence and browse records. They cannot submit investigations, run ingestion, use speech, call ADK, or run experiments.
-- Release 0.3.0 is deployed on the existing Cloud Run service and Cloud SQL database. Terraform added no resource during this release. Further resource or cost changes require review.
+- Release 0.3.1 is deployed on the existing Cloud Run service and Cloud SQL database. Terraform added no resource during this release. Further resource or cost changes require review.
 
 ## Current limits
 

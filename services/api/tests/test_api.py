@@ -1,4 +1,5 @@
 import os
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
@@ -70,6 +71,19 @@ def test_provenance_and_deterministic_analytics(tmp_path, monkeypatch):
                                headers={'X-Admin-Token': 'local-test-secret'})
         assert record['url'] in response.text
         assert reserve_usage('adk_invocation', 1, 1)  # indexed questions do not reserve paid model usage
+
+        async def fake_adk(_question, _evidence, _history):
+            yield SimpleNamespace(author='verification_agent', usage_metadata=None,
+                                  content=SimpleNamespace(parts=[SimpleNamespace(
+                                      text=f'Indexed record: {record["url"]}', function_call=None)]))
+
+        monkeypatch.setattr('neuromesh_api.research.adk_synthesis', fake_adk)
+        agent = client.post('/api/investigate', json={'question': 'Find ai-agents repository', 'mode': 'agent'},
+                            headers={'X-Admin-Token': 'local-test-secret'})
+        assert agent.status_code == 200
+        assert '"mode": "adk"' in agent.text
+        with connect() as db:
+            assert db.execute("SELECT state FROM agent_executions ORDER BY started_at DESC LIMIT 1").fetchone()['state'] == 'completed'
 
 
 def test_cloud_speech_is_operator_only_and_not_cached(tmp_path, monkeypatch):
