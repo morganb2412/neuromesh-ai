@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { fallbackGraph } from '../src/demo';
-describe('visual seed',()=>{
-  it('is explicit demo data with no false provenance',()=>{
-    expect(fallbackGraph.mode).toBe('demo');
-    expect(fallbackGraph.nodes.length).toBeGreaterThan(100);
-    expect(fallbackGraph.nodes.every(n=>n.demo===1 && n.source_record_id===null)).toBe(true);
-    expect(fallbackGraph.edges.every(e=>e.demo===1 && e.evidence_id===null)).toBe(true);
+import { fallbackGraph, fallbackStatus } from '../src/demo';
+describe('offline initial state',()=>{
+  it('contains no fabricated research records or counts',()=>{
+    expect(fallbackGraph.mode).toBe('empty');
+    expect(fallbackGraph.nodes).toEqual([]);
+    expect(fallbackGraph.edges).toEqual([]);
+    expect(fallbackStatus.counts.source_records).toBe(0);
   });
 });

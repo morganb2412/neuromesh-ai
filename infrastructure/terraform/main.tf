@@ -223,7 +223,7 @@ resource "google_cloud_run_v2_service" "app" {
       }
       env {
         name  = "NEUROMESH_SEED_DEMO"
-        value = "true"
+        value = "false"
       }
       env {
         name  = "NEUROMESH_ENABLE_ADK"

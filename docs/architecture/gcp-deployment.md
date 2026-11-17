@@ -32,7 +32,7 @@ This creates a dedicated database, repository, service account, Secret Manager e
 From the repository root, use the repository URI from Terraform output. Build the multi-stage Dockerfile with Cloud Build, then use the pushed digest for Terraform deployment:
 
 ```bash
-IMAGE=us-central1-docker.pkg.dev/moesautomationweekly/neuromesh/observatory:0.2.3
+IMAGE=us-central1-docker.pkg.dev/moesautomationweekly/neuromesh/observatory:0.2.5
 gcloud builds submit --project moesautomationweekly --config cloudbuild.yaml --substitutions=_IMAGE=$IMAGE .
 cd infrastructure/terraform
 terraform plan -var project_id=moesautomationweekly -var deploy_app=true -var image=IMAGE_DIGEST_URI

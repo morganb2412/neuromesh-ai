@@ -4,11 +4,12 @@ import { useEffect, useMemo, useRef, type ComponentRef, type RefObject } from 'r
 import * as THREE from 'three';
 import type { Edge, Entity, GraphData } from './types';
 
-const COLORS: Record<string, string> = { PAPER: '#498df8', GRANT: '#f1b465', MODEL: '#a48cff', ALGORITHM: '#8cecff', INDUSTRY: '#46d4bc', REPOSITORY: '#84adfb', SCIENTIFIC_TOPIC: '#e3f4ff' };
-const clusterCenters = [[-9,3,0],[-4,-4,0],[3,4,-1],[9,-1,-2],[2,-6,1],[-10,-5,-1]];
+const COLORS: Record<string, string> = { PAPER: '#498df8', GRANT: '#f1b465', MODEL: '#a48cff', ALGORITHM: '#8cecff', INDUSTRY: '#46d4bc', REPOSITORY: '#84adfb', SCIENTIFIC_TOPIC: '#e3f4ff', RESEARCHER: '#78c8fc', ORGANIZATION: '#73bbd6' };
+const KIND_ORDER = ['PAPER','GRANT','MODEL','ALGORITHM','INDUSTRY','REPOSITORY','RESEARCHER','ORGANIZATION','SCIENTIFIC_TOPIC'];
+const clusterCenters = [[-9,3,0],[-4,-4,0],[3,4,-1],[9,-1,-2],[2,-6,1],[-10,-5,-1],[-5,2,1],[-1,-2,-1],[5,1,0]];
 function hash(input: string) { let h=2166136261; for (let i=0;i<input.length;i++) h=Math.imul(h ^ input.charCodeAt(i),16777619); return (h>>>0)/4294967295; }
 function initialPosition(node: Entity, i: number): THREE.Vector3 {
-  const k = ['PAPER','GRANT','MODEL','ALGORITHM','INDUSTRY','REPOSITORY'].indexOf(node.kind);
+  const k = KIND_ORDER.indexOf(node.kind);
   const c = clusterCenters[k < 0 ? 2 : k];
   const a = hash(node.id + 'a') * Math.PI * 2, r = 1.2 + Math.sqrt(hash(node.id + 'r')) * 5;
   return new THREE.Vector3(c[0]+Math.cos(a)*r,c[1]+Math.sin(a)*r,c[2]+(hash(node.id+'z')-.5)*7);
@@ -21,8 +22,8 @@ function CameraActions({ focus, data, controls, resetSignal, mode2d }: { focus: 
   return null;
 }
 
-function LivingNetwork({ data, selected, onSelect, query, visibleKinds, visibleEdges, highlighted, paused, reducedMotion, mode2d }: {
- data: GraphData; selected: string | null; onSelect: (id: string) => void; query: string; visibleKinds: Set<string>; visibleEdges: Set<string>; highlighted: Set<string>; paused: boolean; reducedMotion: boolean; mode2d: boolean;
+function LivingNetwork({ data, selected, onSelect, query, visibleKinds, visibleEdges, highlighted, highlightedEdges, paused, reducedMotion, mode2d }: {
+ data: GraphData; selected: string | null; onSelect: (id: string) => void; query: string; visibleKinds: Set<string>; visibleEdges: Set<string>; highlighted: Set<string>; highlightedEdges: Set<string>; paused: boolean; reducedMotion: boolean; mode2d: boolean;
 }) {
   const positions = useMemo(() => data.nodes.map(initialPosition), [data]);
   const velocities = useMemo(() => data.nodes.map(() => new THREE.Vector3()), [data]);
@@ -47,7 +48,7 @@ function LivingNetwork({ data, selected, onSelect, query, visibleKinds, visibleE
       const dt=Math.min(delta,.05)*32;
       for (let i=0;i<positions.length;i++) {
         const p=positions[i],v=velocities[i], n=data.nodes[i];
-        const c=clusterCenters[Math.max(0,['PAPER','GRANT','MODEL','ALGORITHM','INDUSTRY','REPOSITORY'].indexOf(n.kind))];
+        const c=clusterCenters[Math.max(0,KIND_ORDER.indexOf(n.kind))];
         v.x+=(c[0]-p.x)*.0007*dt; v.y+=(c[1]-p.y)*.0007*dt; v.z+=((mode2d?0:c[2])-p.z)*.0006*dt;
         v.x+=Math.sin(elapsed.current*.25+i*2.2)*.0007*dt; v.y+=Math.cos(elapsed.current*.28+i)*.0007*dt;
       }
@@ -68,7 +69,7 @@ function LivingNetwork({ data, selected, onSelect, query, visibleKinds, visibleE
     if(pickRef.current) pickRef.current.instanceMatrix.needsUpdate=true;
     if(pointRef.current) { const g=pointRef.current.geometry;g.attributes.position.needsUpdate=true;g.attributes.color.needsUpdate=true; }
     edgePairs.forEach(([ai,bi,e],i)=>{
-      const a=positions[ai!],b=positions[bi!], shown=visibleEdges.has(e.kind)&&visibleKinds.has(data.nodes[ai!].kind)&&visibleKinds.has(data.nodes[bi!].kind),active=highlighted.has(e.source_id)&&highlighted.has(e.target_id);
+      const a=positions[ai!],b=positions[bi!], shown=visibleEdges.has(e.kind)&&visibleKinds.has(data.nodes[ai!].kind)&&visibleKinds.has(data.nodes[bi!].kind),active=highlightedEdges.has(e.id);
       linePositions.set([a.x,a.y,mode2d?0:a.z,b.x,b.y,mode2d?0:b.z],i*6);
       const color=new THREE.Color(active?'#8eefff':e.confidence==='inferred'?'#df9a68':e.demo?'#31658a':'#82c9ef').multiplyScalar(shown?active?1.5:.45:0);
       lineColors.set([...color.toArray(),...color.toArray()],i*6);
@@ -98,7 +99,7 @@ function AmbientField({ reducedMotion }: { reducedMotion: boolean }) {
   return <points ref={ref}><bufferGeometry><bufferAttribute attach="attributes-position" args={[vertices,3]}/></bufferGeometry><pointsMaterial size={.026} color="#326b91" transparent opacity={.54} depthWrite={false}/></points>;
 }
 
-export function GraphScene(props: {data:GraphData;selected:string|null;onSelect:(id:string)=>void;query:string;visibleKinds:Set<string>;visibleEdges:Set<string>;highlighted:Set<string>;paused:boolean;reducedMotion:boolean;mode2d:boolean;resetSignal:number}) {
+export function GraphScene(props: {data:GraphData;selected:string|null;onSelect:(id:string)=>void;query:string;visibleKinds:Set<string>;visibleEdges:Set<string>;highlighted:Set<string>;highlightedEdges:Set<string>;paused:boolean;reducedMotion:boolean;mode2d:boolean;resetSignal:number}) {
   const controls=useRef<ComponentRef<typeof OrbitControls>>(null);
   return <Canvas aria-label="Interactive neural knowledge graph" camera={{position:[0,0,31],fov:58}} dpr={[1,1.6]} gl={{antialias:true,alpha:true,powerPreference:'high-performance'}} onPointerMissed={()=>props.onSelect('')}>
     <color attach="background" args={['#050d19']}/><fog attach="fog" args={['#050d19',35,80]}/>

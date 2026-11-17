@@ -1,13 +1,13 @@
-"""Deterministic graph measurements. Demo and public records are never mixed."""
+"""Deterministic measurements over the current source-backed graph."""
 import networkx as nx
 
-from .store import connect
+from .store import graph as current_graph
 
 
-def analyze_graph(include_demo: bool = False):
-    with connect() as db:
-        nodes = [dict(r) for r in db.execute('SELECT id,label,kind FROM entities WHERE demo=? ORDER BY id', (int(include_demo),))]
-        edges = [dict(r) for r in db.execute('SELECT source_id,target_id FROM relationships WHERE demo=? ORDER BY id', (int(include_demo),))]
+def analyze_graph():
+    snapshot = current_graph()
+    nodes = sorted(snapshot['nodes'], key=lambda row: row['id'])
+    edges = sorted(snapshot['edges'], key=lambda row: row['id'])
     graph = nx.Graph()
     graph.add_nodes_from(n['id'] for n in nodes)
     graph.add_edges_from((e['source_id'],e['target_id']) for e in edges)
@@ -28,7 +28,7 @@ def analyze_graph(include_demo: bool = False):
             if error < 1e-10:
                 break
     ordered = sorted(nodes, key=lambda n:(-rank.get(n['id'],0),n['id']))[:10]
-    return {'mode':'demo' if include_demo else 'live','node_count':graph.number_of_nodes(),
+    return {'mode':'live','node_count':graph.number_of_nodes(),
             'edge_count':graph.number_of_edges(),'density':nx.density(graph),
             'connected_components':nx.number_connected_components(graph),
             'top_entities':[{'id':n['id'],'label':n['label'],'pagerank':round(rank[n['id']],8)} for n in ordered],

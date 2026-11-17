@@ -5,6 +5,7 @@ import secrets
 import time
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
+from uuid import UUID
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,24 +13,22 @@ from fastapi.responses import StreamingResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from .demo import seed_demo
 from .analytics import analyze_graph
 from .ingestion import SOURCES, synchronize
 from .ml import cluster_records
 from .research import investigate
+from .memory import semantic_neighbors, session_context
+from .experiments import laboratory_state, export_run, markdown_report
 from .store import connect, graph, initialize, status, reserve_usage
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     initialize()
-    if os.getenv('NEUROMESH_SEED_DEMO', 'true').lower() == 'true':
-        with connect() as db:
-            seed_demo(db)
     yield
 
 
-app = FastAPI(title='NeuroMesh AI API', version='0.2.3', lifespan=lifespan)
+app = FastAPI(title='NeuroMesh AI API', version='0.2.5', lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=[os.getenv('NEUROMESH_CORS_ORIGIN', 'http://localhost:5173')],
                    allow_methods=['GET','POST'], allow_headers=['Content-Type','X-Admin-Token'])
 _request_times: dict[str, deque[float]] = defaultdict(deque)
@@ -37,6 +36,7 @@ _request_times: dict[str, deque[float]] = defaultdict(deque)
 
 class InvestigationRequest(BaseModel):
     question: str = Field(min_length=5, max_length=500)
+    session_id: UUID | None = None
 
 
 class SyncRequest(BaseModel):
@@ -70,8 +70,8 @@ def get_status():
 
 
 @app.get('/api/analytics')
-def get_analytics(demo: bool = False):
-    return analyze_graph(include_demo=demo)
+def get_analytics():
+    return analyze_graph()
 
 
 @app.get('/api/clusters')
@@ -87,6 +87,53 @@ def get_agent_executions(x_admin_token: str | None = Header(default=None)):
         return [dict(row) for row in db.execute('SELECT id,agent_name,state,model_id,token_count,started_at,finished_at,error FROM agent_executions ORDER BY started_at DESC LIMIT 30')]
 
 
+@app.get('/api/memory/session/{session_id}')
+def get_memory_session(session_id: UUID, x_admin_token: str | None = Header(default=None)):
+    if not authorized(x_admin_token):
+        raise HTTPException(status_code=403, detail='Operator token required')
+    return session_context(str(session_id))
+
+
+@app.get('/api/memory/semantic/{entity_id}')
+def get_semantic_memory(entity_id: str):
+    if len(entity_id) > 160:
+        raise HTTPException(status_code=422, detail='Entity ID too long')
+    return semantic_neighbors(entity_id)
+
+
+@app.get('/api/laboratory')
+def get_laboratory(x_admin_token: str | None = Header(default=None)):
+    if not authorized(x_admin_token):
+        raise HTTPException(status_code=403, detail='Operator token required')
+    return laboratory_state()
+
+
+@app.get('/api/experiments/runs/{run_id}/export')
+def get_run_export(run_id: UUID, format: str = 'json', x_admin_token: str | None = Header(default=None)):
+    if not authorized(x_admin_token):
+        raise HTTPException(status_code=403, detail='Operator token required')
+    if format not in ('csv', 'json'):
+        raise HTTPException(status_code=422, detail='Use csv or json')
+    try:
+        content = export_run(str(run_id), format)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(content=content, media_type='text/csv' if format == 'csv' else 'application/json',
+                    headers={'Content-Disposition': f'attachment; filename="neuromesh-{run_id}.{format}"'})
+
+
+@app.get('/api/experiments/runs/{run_id}/report')
+def get_run_report(run_id: UUID, x_admin_token: str | None = Header(default=None)):
+    if not authorized(x_admin_token):
+        raise HTTPException(status_code=403, detail='Operator token required')
+    try:
+        content = markdown_report(str(run_id))
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(content=content, media_type='text/markdown',
+                    headers={'Content-Disposition': f'attachment; filename="neuromesh-{run_id}.md"'})
+
+
 @app.post('/api/investigate')
 async def start_investigation(request: InvestigationRequest, connection: Request, x_admin_token: str | None = Header(default=None)):
     address = connection.client.host if connection.client else 'unknown'
@@ -98,7 +145,8 @@ async def start_investigation(request: InvestigationRequest, connection: Request
         raise HTTPException(status_code=429, detail='Hourly investigation limit reached')
     times.append(now)
     allow_adk = authorized(x_admin_token)
-    return StreamingResponse(investigate(request.question, allow_adk=allow_adk), media_type='text/event-stream',
+    return StreamingResponse(investigate(request.question, allow_adk=allow_adk,
+                                         session_id=str(request.session_id) if request.session_id else None), media_type='text/event-stream',
                              headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
 
 

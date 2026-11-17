@@ -18,7 +18,7 @@ def test_postgres_schema_ingestion_and_metrics(monkeypatch):
     assert persist_records([record], 'agent-evidence') == 1
     live = graph()
     assert any(n['label'] == record['title'] and not n['demo'] for n in live['nodes'])
-    assert any(e['confidence'] == 'verified' and e['evidence_id'] in live['evidence'] for e in live['edges'])
+    assert live['edges'] == []  # repository search results alone establish no research relationship
     assert status()['counts']['source_records'] >= 1
     first = analyze_graph()
     assert first == analyze_graph()

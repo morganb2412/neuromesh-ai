@@ -132,6 +132,9 @@ class PostgresConnection:
     def commit(self):
         self.connection.commit()
 
+    def rollback(self):
+        self.connection.rollback()
+
     def close(self):
         self.connection.close()
 
@@ -168,14 +171,20 @@ def connect():
         db.execute('PRAGMA foreign_keys=ON')
     try:
         yield db
+    except Exception:
+        db.rollback()
+        raise
+    else:
         db.commit()
     finally:
         db.close()
 
 
 def initialize():
+    from .migrations import apply_migrations
     with connect() as db:
         db.executescript(SCHEMA_POSTGRES if is_postgres() else SCHEMA)
+        apply_migrations(db)
 
 
 def reserve_usage(kind: str, units: int, daily_limit: int) -> bool:
@@ -194,18 +203,33 @@ def reserve_usage(kind: str, units: int, daily_limit: int) -> bool:
 
 def graph():
     with connect() as db:
-        nodes = [dict(row) for row in db.execute('SELECT id,label,kind,description,demo,source_record_id FROM entities')]
-        edges = [dict(row) for row in db.execute('SELECT id,source_id,target_id,kind,confidence,evidence_id,demo FROM relationships')]
-        evidence = {row['id']: dict(row) for row in db.execute('SELECT id,source_record_id,excerpt,url FROM evidence')}
-    return {'nodes': nodes, 'edges': edges, 'evidence': evidence, 'mode': 'live' if any(not n['demo'] for n in nodes) else 'demo'}
+        all_nodes = [dict(row) for row in db.execute('SELECT id,label,kind,description,demo,source_record_id FROM entities WHERE demo=0 AND source_record_id IS NOT NULL')]
+        edges = [dict(row) for row in db.execute('''SELECT r.id,r.source_id,r.target_id,r.kind,r.confidence,r.evidence_id,r.demo
+            FROM relationships r JOIN entities a ON a.id=r.source_id JOIN entities b ON b.id=r.target_id
+            LEFT JOIN relationship_observations o ON o.relationship_id=r.id
+            WHERE r.demo=0 AND r.evidence_id IS NOT NULL AND o.withdrawn_at IS NULL
+            AND a.source_record_id IS NOT NULL AND b.source_record_id IS NOT NULL''')]
+        linked = {node_id for edge in edges for node_id in (edge['source_id'], edge['target_id'])}
+        nodes = [node for node in all_nodes if node['kind'] in ('PAPER','GRANT','MODEL','REPOSITORY') or node['id'] in linked]
+        current_evidence = {edge['evidence_id'] for edge in edges}
+        evidence = {row['id']: dict(row) for row in db.execute('SELECT id,source_record_id,excerpt,url FROM evidence')
+                    if row['id'].startswith('evidence:') or row['id'] in current_evidence}
+    return {'nodes': nodes, 'edges': edges, 'evidence': evidence, 'mode': 'live' if nodes else 'empty'}
 
 
 def status():
+    current_graph = graph()
     with connect() as db:
-        counts = {name: db.execute(f'SELECT COUNT(*) AS n FROM {name}').fetchone()['n'] for name in ('entities','relationships','source_records','evidence')}
+        counts = {
+            'entities': len(current_graph['nodes']),
+            'relationships': len(current_graph['edges']),
+            'source_records': db.execute('SELECT COUNT(*) AS n FROM source_records').fetchone()['n'],
+            'evidence': db.execute('SELECT COUNT(*) AS n FROM evidence').fetchone()['n'],
+            'scholarly_records': db.execute('SELECT COUNT(*) AS n FROM scholarly_records WHERE validation_status=?', ('valid',)).fetchone()['n'],
+        }
         jobs = [dict(r) for r in db.execute('SELECT * FROM ingestion_jobs ORDER BY id DESC LIMIT 12')]
         sources = [dict(r) for r in db.execute('SELECT source,COUNT(*) AS records,MAX(retrieved_at) AS last_sync FROM source_records GROUP BY source')]
     return {'counts': counts, 'jobs': jobs, 'sources': sources,
             'configured_adk': bool(os.getenv('NEUROMESH_ENABLE_ADK') == 'true' and os.getenv('NEUROMESH_MODEL')),
             'configured_tts': os.getenv('NEUROMESH_ENABLE_CLOUD_TTS') == 'true',
-            'mode': 'live' if counts['source_records'] else 'demo'}
+            'mode': 'live' if counts['source_records'] else 'empty'}

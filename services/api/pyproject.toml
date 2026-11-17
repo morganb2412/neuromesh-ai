@@ -1,10 +1,10 @@
 [project]
 name = "neuromesh-api"
-version = "0.2.3"
+version = "0.2.5"
 requires-python = ">=3.11"
-dependencies = ["fastapi>=0.115,<1", "uvicorn[standard]>=0.30,<1", "httpx>=0.27,<1", "networkx>=3.3,<5", "psycopg[binary]>=3.2,<4"]
+dependencies = ["fastapi>=0.115,<1", "uvicorn[standard]>=0.30,<1", "httpx>=0.27,<1", "networkx>=3.3,<5", "psycopg[binary]>=3.2,<4", "defusedxml>=0.7,<1"]
 [project.optional-dependencies]
-agents = ["google-adk>=2.0,<3", "google-cloud-texttospeech>=2.20,<3"]
+agents = ["google-adk>=2.0,<3", "google-genai>=1.0,<3", "google-cloud-texttospeech>=2.20,<3"]
 test = ["pytest>=8,<10", "pytest-asyncio>=0.23,<2"]
 [build-system]
 requires = ["setuptools>=68"]

@@ -1,5 +1,16 @@
 import { expect, test } from '@playwright/test';
 
+test('unavailable API shows no fabricated graph or counts', async ({page})=>{
+  await page.route('**/api/graph',route=>route.abort());
+  await page.route('**/api/status',route=>route.abort());
+  await page.goto('/');
+  await expect(page.locator('.system-pill')).toContainText('API OFFLINE');
+  await expect(page.locator('.dataset-badge')).toContainText('API OFFLINE');
+  await expect(page.locator('.graph-status')).toContainText('NO INDEXED GRAPH');
+  await expect(page.locator('.metric-value')).toContainText('0');
+  await expect(page.locator('.holo-canvas canvas')).toBeVisible();
+});
+
 test('observatory renders and receives grounded investigation events', async ({page})=>{
   await page.goto('/');
   await expect(page.getByRole('heading',{name:/Intelligence, in motion/})).toBeVisible();
@@ -14,13 +25,24 @@ test('observatory renders and receives grounded investigation events', async ({p
 test('research and analytics show indexed measurements', async ({page})=>{
   await page.goto('/');
   await page.getByRole('button',{name:'Research',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'Research.'})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Research.',exact:true})).toBeVisible();
   await expect(page.locator('.record-grid .workspace-card').first()).toBeVisible();
   await page.getByRole('button',{name:'Locate in graph'}).first().click();
   await expect(page.locator('.entity-inspector')).toBeVisible();
   await page.getByRole('button',{name:'Analytics',exact:true}).click();
   await expect(page.getByText('TF-IDF / PUBLIC RECORD TITLES')).toBeVisible();
   await expect(page.getByText('Dataset SHA-256:')).toBeVisible();
+});
+
+test('operator source settings expose scholarly connectors and lab is honest without a token', async ({page})=>{
+  await page.goto('/');
+  await page.getByTitle('Settings').click();
+  const sources=page.getByRole('combobox',{name:'Public source'});
+  await expect(sources.locator('option')).toHaveCount(6);
+  await sources.selectOption('pubmed');
+  await expect(page.getByRole('button',{name:'Sync pubmed'})).toBeDisabled();
+  await page.getByRole('button',{name:'Experiments',exact:true}).click();
+  await expect(page.getByText('Enter the operator token in Observatory settings')).toBeVisible();
 });
 
 test('first microphone turn automatically enables spoken reply', async ({page})=>{
@@ -43,6 +65,44 @@ test('first microphone turn automatically enables spoken reply', async ({page})=
   await expect(page.locator('.message.user')).toContainText(title);
   await expect(page.getByTitle('Toggle voice mode')).toContainText('Voice on');
   await expect.poll(()=>page.evaluate(()=>(window as any).__spokenText||''),{timeout:15000}).not.toBe('');
+});
+
+test('browser speech chooses the available masculine voice', async ({page})=>{
+  await page.addInitScript(()=>{
+    const state=window as any;
+    Object.defineProperty(window,'SpeechSynthesisUtterance',{value:class{voice:any=null;onstart:any;onend:any;onerror:any;onboundary:any;text:string;constructor(text:string){this.text=text}},configurable:true});
+    Object.defineProperty(window,'speechSynthesis',{value:{cancel(){},getVoices(){return [{name:'Samantha',lang:'en-US'},{name:'Eddy (English (United States))',lang:'en-US'}]},speak(utterance:any){state.__voiceName=utterance.voice?.name;utterance.onstart?.();setTimeout(()=>utterance.onend?.(),100)}},configurable:true});
+  });
+  await page.goto('/');
+  await page.getByTitle('Toggle voice mode').click();
+  await page.getByTitle('Unmute assistant').click();
+  await page.getByRole('button',{name:'AI agent research'}).click();
+  await expect.poll(()=>page.evaluate(()=>(window as any).__voiceName)).toBe('Eddy (English (United States))');
+});
+
+test('the 3D jaw reacts to a spoken word boundary and stops on interruption', async ({page})=>{
+  await page.addInitScript(()=>{
+    const state=window as any;
+    const original=window.matchMedia.bind(window);
+    window.matchMedia=(query:string)=>query.includes('prefers-reduced-motion')
+      ? {matches:true,media:query,addEventListener(){},removeEventListener(){}} as any : original(query);
+    Object.defineProperty(window,'SpeechSynthesisUtterance',{value:class{voice:any=null;onstart:any;onend:any;onerror:any;onboundary:any;text:string;constructor(text:string){this.text=text}},configurable:true});
+    Object.defineProperty(window,'speechSynthesis',{value:{cancel(){},getVoices(){return [{name:'Eddy (English (United States))',lang:'en-US'}]},speak(utterance:any){state.__utterance=utterance;utterance.onstart?.()}},configurable:true});
+  });
+  await page.goto('/');
+  await page.getByTitle('Toggle voice mode').click();
+  await page.getByTitle('Unmute assistant').click();
+  await page.getByRole('button',{name:'AI agent research'}).click();
+  await expect(page.locator('.hologram')).toHaveAttribute('data-state','speaking');
+  await page.waitForTimeout(650);
+  const canvas=page.locator('.holo-canvas canvas');
+  const before=await canvas.screenshot();
+  await page.evaluate(()=>(window as any).__utterance.onboundary?.({name:'word',charIndex:0}));
+  await page.waitForTimeout(90);
+  const speaking=await canvas.screenshot();
+  expect(speaking.equals(before)).toBe(false);
+  await page.getByTitle('Stop speaking or investigating').click();
+  await expect(page.locator('.hologram')).toHaveAttribute('data-state','interrupted');
 });
 
 test('microphone reconnects after a premature recognition end', async ({page})=>{

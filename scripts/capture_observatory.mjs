@@ -4,7 +4,7 @@ const browser = await chromium.launch({ headless: true, channel: 'chrome' });
 try {
   const page = await browser.newPage({ viewport: { width: 1600, height: 900 }, deviceScaleFactor: 1 });
   const errors=[]; page.on('pageerror', e=>errors.push(e.message));
-  await page.goto('http://127.0.0.1:5173/', { waitUntil: 'networkidle' });
+  await page.goto(process.env.NEUROMESH_WEB_URL || 'http://127.0.0.1:5173/', { waitUntil: 'networkidle' });
   await page.locator('.graph-stage canvas').waitFor();
   await page.locator('.holo-canvas canvas').waitFor();
   await page.waitForTimeout(1800);
