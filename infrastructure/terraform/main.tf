@@ -132,6 +132,10 @@ resource "google_secret_manager_secret_version" "database" {
 resource "google_secret_manager_secret_version" "operator" {
   secret      = google_secret_manager_secret.operator.id
   secret_data = random_password.operator.result
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "google_secret_manager_secret_iam_member" "database_runtime" {
@@ -289,7 +293,7 @@ resource "google_cloud_run_v2_service" "app" {
         value_source {
           secret_key_ref {
             secret  = google_secret_manager_secret.operator.secret_id
-            version = "latest"
+            version = google_secret_manager_secret_version.operator.version
           }
         }
       }

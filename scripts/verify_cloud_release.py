@@ -23,6 +23,8 @@ def verify():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--with-operator', action='store_true',
                         help='Make one capped ADK request and one Cloud TTS request')
+    parser.add_argument('--operator-auth-only', action='store_true',
+                        help='Verify operator authorization without model or speech calls')
     args = parser.parse_args()
     base = terraform_output('app_url')
     with httpx.Client(timeout=120.0) as client:
@@ -54,12 +56,14 @@ def verify():
                   'scholarly_records': status['counts']['scholarly_records'],
                   'entities': len(graph['nodes']), 'relationships': len(graph['edges']),
                   'cited_answer': True, 'evidence_path': True}
-        if args.with_operator:
+        if args.with_operator or args.operator_auth_only:
             token = terraform_output('operator_token')
             headers = {'X-Admin-Token': token}
             lab = client.get(f'{base}/api/laboratory', headers=headers)
             lab.raise_for_status()
             assert 'datasets' in lab.json()
+            result['operator_auth'] = True
+        if args.with_operator:
             agent_events = read_events(client.post(f'{base}/api/investigate',
                                                     json={'question': question}, headers=headers))
             errors = [payload for name, payload in agent_events if name == 'agent.error']
