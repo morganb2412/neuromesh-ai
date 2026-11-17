@@ -1,7 +1,7 @@
 import pytest
 from defusedxml.common import EntitiesForbidden
 
-from neuromesh_api.ingestion import normalize_arxiv_feed, normalize_pubmed_xml
+from neuromesh_api.ingestion import normalize_arxiv_feed, normalize_pubmed_xml, normalize_github, normalize_nih
 
 
 ARXIV_FEED = b'''<feed xmlns="http://www.w3.org/2005/Atom" xmlns:arxiv="http://arxiv.org/schemas/atom">
@@ -45,3 +45,12 @@ def test_external_xml_entities_are_rejected():
     attack = b'<!DOCTYPE feed [<!ENTITY x SYSTEM "file:///etc/passwd">]><feed>&x;</feed>'
     with pytest.raises(EntitiesForbidden):
         normalize_arxiv_feed(attack)
+
+
+def test_public_source_links_use_canonical_hosts():
+    repository = normalize_github({'id': 42, 'full_name': 'research/project',
+                                   'html_url': 'javascript:alert(1)'})
+    award = normalize_nih({'appl_id': 12345, 'project_title': 'Research',
+                           'project_detail_url': 'https://example.invalid/other'})
+    assert repository['url'] == 'https://github.com/research/project'
+    assert award['url'] == 'https://reporter.nih.gov/project-details/12345'

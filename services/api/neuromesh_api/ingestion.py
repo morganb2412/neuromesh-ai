@@ -256,7 +256,9 @@ def normalize_pubmed_xml(content: bytes) -> list[dict]:
 
 
 def normalize_github(x):
-    return {'id': f"github:{x['id']}", 'source': 'github', 'title': x['full_name'], 'url': x['html_url'], 'date': x.get('created_at'), 'kind': 'REPOSITORY', 'payload': x}
+    return {'id': f"github:{x['id']}", 'source': 'github', 'title': x['full_name'],
+            'url': 'https://github.com/' + quote(x['full_name'], safe='/'),
+            'date': x.get('created_at'), 'kind': 'REPOSITORY', 'payload': x}
 
 
 def normalize_huggingface(x):
@@ -265,7 +267,9 @@ def normalize_huggingface(x):
 
 def normalize_nih(x):
     identifier = x.get('appl_id') or x.get('core_project_num')
-    return {'id': f'nih:{identifier}', 'source': 'nih', 'title': x.get('project_title') or 'Untitled project', 'url': x.get('project_detail_url') or f'https://reporter.nih.gov/project-details/{identifier}', 'date': str(x.get('fiscal_year') or ''), 'kind': 'GRANT', 'payload': x}
+    return {'id': f'nih:{identifier}', 'source': 'nih', 'title': x.get('project_title') or 'Untitled project',
+            'url': 'https://reporter.nih.gov/project-details/' + quote(str(identifier), safe=''),
+            'date': str(x.get('fiscal_year') or ''), 'kind': 'GRANT', 'payload': x}
 
 
 def persist_records(records, query='artificial intelligence'):

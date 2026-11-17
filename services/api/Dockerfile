@@ -11,7 +11,8 @@ WORKDIR /app
 COPY services/api /app/services/api
 COPY scripts /app/scripts
 COPY --from=web-build /src/apps/web/dist /app/web
-RUN pip install --no-cache-dir '/app/services/api[agents]'
+RUN python -m pip install --no-cache-dir --upgrade 'pip>=26.2,<27' \
+    && python -m pip install --no-cache-dir '/app/services/api[agents]'
 ENV NEUROMESH_DB=/tmp/neuromesh.db
 ENV NEUROMESH_STATIC_DIR=/app/web
 EXPOSE 8080
