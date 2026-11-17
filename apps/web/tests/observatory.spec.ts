@@ -1,4 +1,33 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+
+const adminToken=process.env.NEUROMESH_TEST_ADMIN_TOKEN;
+async function signIn(page:Page){
+  test.skip(!adminToken,'requires a configured test operator token');
+  await page.route('**/api/speech',route=>route.fulfill({status:503,body:'Browser speech test'}));
+  await page.getByRole('button',{name:'Admin',exact:true}).click();
+  await page.getByLabel('OPERATOR TOKEN').fill(adminToken!);
+  await page.getByRole('button',{name:'Sign in',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Admin active'})).toBeVisible();
+}
+
+test('public visitors can browse but cannot ask the assistant',async({page})=>{
+  await page.goto('/');
+  await expect(page.locator('.guest-access')).toContainText('read only');
+  await expect(page.getByRole('textbox',{name:'Research question'})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Talk to NeuroMesh'})).toHaveCount(0);
+  const response=await page.request.post('/api/investigate',{data:{question:'Find continual learning research'}});
+  expect(response.status()).toBe(403);
+});
+
+test('invalid admin sign-in leaves the public view read only',async({page})=>{
+  await page.goto('/');
+  await page.getByRole('button',{name:'Admin',exact:true}).click();
+  await page.getByLabel('OPERATOR TOKEN').fill('invalid-token');
+  await page.getByRole('button',{name:'Sign in',exact:true}).click();
+  await expect(page.getByRole('alert')).toContainText('Token not accepted');
+  await expect(page.locator('.guest-access')).toContainText('read only');
+  await expect(page.getByRole('textbox',{name:'Research question'})).toHaveCount(0);
+});
 
 test('unavailable API shows no fabricated graph or counts', async ({page})=>{
   await page.route('**/api/graph',route=>route.abort());
@@ -17,6 +46,7 @@ test('observatory renders and receives grounded investigation events', async ({p
   await expect(page.locator('.dataset-badge')).toContainText(/DEMONSTRATION DATA|PUBLIC RECORDS/);
   await expect(page.locator('.graph-stage canvas')).toBeVisible();
   await expect(page.locator('.holo-canvas canvas')).toBeVisible();
+  await signIn(page);
   await page.getByRole('button',{name:'AI agent research'}).click();
   await expect(page.locator('.message.assistant')).toHaveCount(2);
   await expect(page.locator('.investigation-state')).toContainText(/cited records/);
@@ -34,15 +64,20 @@ test('research and analytics show indexed measurements', async ({page})=>{
   await expect(page.getByText('Dataset SHA-256:')).toBeVisible();
 });
 
-test('operator source settings expose scholarly connectors and lab is honest without a token', async ({page})=>{
+test('admin panel exposes source controls and explicit agent mode', async ({page})=>{
   await page.goto('/');
-  await page.getByTitle('Settings').click();
+  await signIn(page);
+  await page.getByRole('button',{name:'Admin active'}).click();
   const sources=page.getByRole('combobox',{name:'Public source'});
   await expect(sources.locator('option')).toHaveCount(6);
   await sources.selectOption('pubmed');
-  await expect(page.getByRole('button',{name:'Sync pubmed'})).toBeDisabled();
+  await expect(page.getByRole('button',{name:'Sync pubmed'})).toBeEnabled();
+  await expect(page.getByRole('checkbox',{name:'Use Gemini agent for questions'})).not.toBeChecked();
+  await page.getByRole('button',{name:'Sign out'}).click();
+  await expect(page.locator('.guest-access')).toContainText('read only');
+  await expect(page.locator('.message')).toHaveCount(0);
   await page.getByRole('button',{name:'Experiments',exact:true}).click();
-  await expect(page.getByText('Enter the operator token in Observatory settings')).toBeVisible();
+  await expect(page.getByText('Use Admin sign-in')).toBeVisible();
 });
 
 test('first microphone turn automatically enables spoken reply', async ({page})=>{
@@ -58,6 +93,7 @@ test('first microphone turn automatically enables spoken reply', async ({page})=
     Object.defineProperty(window,'speechSynthesis',{value:{cancel(){},speak(utterance:any){state.__spokenText=utterance.text;utterance.onstart?.();setTimeout(()=>utterance.onend?.(),1500)}},configurable:true});
   });
   await page.goto('/');
+  await signIn(page);
   const title=await page.evaluate(async()=>{const graph=await (await fetch('/api/graph')).json();return graph.nodes.find((n:any)=>!n.demo&&n.source_record_id)?.label});
   expect(title).toBeTruthy();
   await page.evaluate(value=>(window as any).__fakeTranscript=`Find evidence about ${value}`,title);
@@ -74,6 +110,7 @@ test('browser speech chooses the available masculine voice', async ({page})=>{
     Object.defineProperty(window,'speechSynthesis',{value:{cancel(){},getVoices(){return [{name:'Samantha',lang:'en-US'},{name:'Eddy (English (United States))',lang:'en-US'}]},speak(utterance:any){state.__voiceName=utterance.voice?.name;utterance.onstart?.();setTimeout(()=>utterance.onend?.(),100)}},configurable:true});
   });
   await page.goto('/');
+  await signIn(page);
   await page.getByTitle('Toggle voice mode').click();
   await page.getByTitle('Unmute assistant').click();
   await page.getByRole('button',{name:'AI agent research'}).click();
@@ -90,6 +127,7 @@ test('the 3D jaw reacts to a spoken word boundary and stops on interruption', as
     Object.defineProperty(window,'speechSynthesis',{value:{cancel(){},getVoices(){return [{name:'Eddy (English (United States))',lang:'en-US'}]},speak(utterance:any){state.__utterance=utterance;utterance.onstart?.()}},configurable:true});
   });
   await page.goto('/');
+  await signIn(page);
   await page.getByTitle('Toggle voice mode').click();
   await page.getByTitle('Unmute assistant').click();
   await page.getByRole('button',{name:'AI agent research'}).click();
@@ -117,6 +155,7 @@ test('microphone reconnects after a premature recognition end', async ({page})=>
     Object.defineProperty(window,'speechSynthesis',{value:{cancel(){},speak(utterance:any){utterance.onstart?.();utterance.onend?.()}},configurable:true});
   });
   await page.goto('/');
+  await signIn(page);
   await page.getByRole('button',{name:'Talk to NeuroMesh'}).click();
   await expect.poll(()=>page.evaluate(()=>(window as any).__starts)).toBe(2);
   await expect(page.locator('.message.user')).toContainText('Find public funding records');
@@ -135,6 +174,7 @@ test('microphone keeps listening after a no-speech timeout', async ({page})=>{
     Object.defineProperty(window,'speechSynthesis',{value:{cancel(){},speak(utterance:any){utterance.onstart?.();utterance.onend?.()}},configurable:true});
   });
   await page.goto('/');
+  await signIn(page);
   await page.getByRole('button',{name:'Talk to NeuroMesh'}).click();
   await expect.poll(()=>page.evaluate(()=>(window as any).__starts)).toBe(2);
   await expect(page.locator('.message.user')).toContainText('Show indexed AI agent research');
@@ -150,6 +190,7 @@ test('microphone failure reports the actual browser error', async ({page})=>{
     Object.defineProperty(window,'SpeechRecognition',{value:FakeRecognition,configurable:true});
   });
   await page.goto('/');
+  await signIn(page);
   await page.getByRole('button',{name:'Talk to NeuroMesh'}).click();
   await expect(page.locator('.message.assistant').last()).toContainText('could not find a working microphone');
   await expect(page.locator('.investigation-state')).toContainText('audio-capture');

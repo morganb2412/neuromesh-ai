@@ -29,9 +29,10 @@ try {
   });
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await page.locator('.holo-canvas canvas').waitFor();
-  await page.getByTitle('Settings').click();
-  await page.locator('.settings-token input[type="password"]').fill(token);
-  await page.getByRole('button', { name: 'Close settings' }).click();
+  await page.getByRole('button', { name: 'Admin', exact: true }).click();
+  await page.getByLabel('OPERATOR TOKEN').fill(token);
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await page.getByRole('button', { name: 'Admin active' }).waitFor();
   await page.getByTitle('Toggle voice mode').click();
   await page.getByTitle('Unmute assistant').click();
   await page.getByRole('textbox', { name: 'Research question' }).fill('Find recent continual learning research');

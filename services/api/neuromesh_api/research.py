@@ -100,12 +100,13 @@ def event(name, **data):
     return f'event: {name}\ndata: {json.dumps(data)}\n\n'
 
 
-async def investigate(question: str, allow_adk: bool = False, session_id: str | None = None):
+async def investigate(question: str, is_operator: bool = False, use_agent: bool = False,
+                      session_id: str | None = None):
     investigation_id = str(uuid.uuid4())
-    history = session_context(session_id) if allow_adk and session_id else []
+    history = session_context(session_id) if is_operator and session_id else []
     with connect() as db:
         db.execute('INSERT INTO investigations(id,question) VALUES(?,?)', (investigation_id, question))
-    if allow_adk and session_id:
+    if is_operator and session_id:
         record_episode(session_id, investigation_id, 'question', {'text': question})
     yield event('investigation.started', id=investigation_id, question=question)
     yield event('agent.activated', agent='Indexed retrieval', mode='deterministic')
@@ -126,7 +127,7 @@ async def investigate(question: str, allow_adk: bool = False, session_id: str | 
     yield event('analysis.started', method='evidence coverage')
     yield event('analysis.completed', evidence_count=len(evidence), method='evidence coverage')
     if evidence:
-        if allow_adk and os.getenv('NEUROMESH_ENABLE_ADK') == 'true' and os.getenv('NEUROMESH_MODEL'):
+        if is_operator and use_agent and os.getenv('NEUROMESH_ENABLE_ADK') == 'true' and os.getenv('NEUROMESH_MODEL'):
             if not reserve_usage('adk_invocation', 1, int(os.getenv('NEUROMESH_ADK_DAILY_LIMIT','20'))):
                 yield event('agent.error', error='Daily ADK budget exhausted')
                 answer = 'The daily agent budget is exhausted. Indexed records are listed below; no relationship claim has been established.'
@@ -178,7 +179,7 @@ async def investigate(question: str, allow_adk: bool = False, session_id: str | 
         await asyncio.sleep(0)
     with connect() as db:
         db.execute('UPDATE investigations SET answer=? WHERE id=?', (answer, investigation_id))
-    if allow_adk and session_id:
+    if is_operator and session_id:
         record_episode(session_id, investigation_id, 'answer',
                        {'text': answer, 'source_urls': [item['url'] for item in evidence]})
     yield event('investigation.completed', id=investigation_id, answer=answer,

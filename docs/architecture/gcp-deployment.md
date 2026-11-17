@@ -33,7 +33,7 @@ This creates a dedicated database, repository, service account, Secret Manager e
 From the repository root, use the repository URI from Terraform output. Build the multi-stage Dockerfile with Cloud Build, then use the pushed digest for Terraform deployment:
 
 ```bash
-IMAGE=us-central1-docker.pkg.dev/moesautomationweekly/neuromesh/observatory:0.3.0
+IMAGE=us-central1-docker.pkg.dev/moesautomationweekly/neuromesh/observatory:0.3.1
 gcloud builds submit --project moesautomationweekly --config cloudbuild.yaml --substitutions=_IMAGE=$IMAGE .
 cd infrastructure/terraform
 terraform plan -var project_id=moesautomationweekly -var deploy_app=true -var image=IMAGE_DIGEST_URI -var enable_adk=true -var model_id=gemini-3.5-flash-lite -var model_location=global -var enable_cloud_tts=true
@@ -43,7 +43,7 @@ terraform output -raw app_url
 
 Replace `IMAGE_DIGEST_URI` with the full Artifact Registry path ending in `@sha256:...` from the successful build output.
 
-Cloud Run is public through `invoker_iam_disabled=true`, Google's supported approach when domain-restricted sharing blocks an `allUsers` IAM grant. Visitors can explore indexed records and submit bounded local investigations. Model calls, source synchronization, and Cloud speech require the operator token. Retrieve that token in a private terminal using `terraform output -raw operator_token` and enter it in the app settings. The token is held in browser memory for that tab. Do not put it in URLs, Git, screenshots, or shared logs.
+Cloud Run is publicly reachable through `invoker_iam_disabled=true`, Google's supported approach when domain-restricted sharing blocks an `allUsers` IAM grant. Visitors can explore indexed records, but all POST routes that investigate, synchronize sources, or synthesize speech require Admin authorization. The UI offers an **Admin** sign-in button and keeps the token in browser memory for that tab. Copy it privately with `terraform output -raw operator_token | pbcopy` and paste it into the Admin form. Indexed Admin questions do not call a model unless the separate Gemini switch is on. Do not put the token in URLs, Git, chats, screenshots, or shared logs.
 
 On 2026-11-16, operator tokens displayed in a conversation were rotated through Terraform. The previous versions were destroyed, and Cloud Run pins the current version. The configuration creates a new version before destroying the old one and updates Cloud Run when the version changes. A public cited answer and operator-only authorization passed after rotation. Never paste the token into a chat; copy it directly to the clipboard from a private terminal when needed.
 

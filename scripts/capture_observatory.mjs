@@ -8,7 +8,7 @@ try {
   await page.locator('.graph-stage canvas').waitFor();
   await page.locator('.holo-canvas canvas').waitFor();
   await page.waitForTimeout(1800);
-  const output=resolve('docs/screenshots/observatory-home.png');
+  const output=resolve(process.env.NEUROMESH_SCREENSHOT_PATH || 'docs/screenshots/observatory-home.png');
   await page.screenshot({ path: output, fullPage: true });
   console.log(JSON.stringify({output, title:await page.title(), canvasCount:await page.locator('canvas').count(), errors}));
   if(errors.length)process.exitCode=1;

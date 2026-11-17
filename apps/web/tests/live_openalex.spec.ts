@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 
 test('live OpenAlex work flows through graph inspection and cited assistant answer', async ({page})=>{
   test.skip(process.env.NEUROMESH_LIVE_INTEGRATION !== '1', 'requires an explicitly ingested local OpenAlex database');
+  test.skip(!process.env.NEUROMESH_TEST_ADMIN_TOKEN, 'requires an operator test token');
   const response=await page.request.get('/api/graph');
   expect(response.ok()).toBe(true);
   const graph=await response.json();
@@ -12,6 +13,10 @@ test('live OpenAlex work flows through graph inspection and cited assistant answ
   expect(graph.evidence[authors[0].evidence_id].url).toMatch(/^https:\/\/openalex\.org\/W\d+$/);
 
   await page.goto('/');
+  await page.getByRole('button',{name:'Admin',exact:true}).click();
+  await page.getByLabel('OPERATOR TOKEN').fill(process.env.NEUROMESH_TEST_ADMIN_TOKEN!);
+  await page.getByRole('button',{name:'Sign in',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Admin active'})).toBeVisible();
   await page.getByRole('button',{name:'Research',exact:true}).click();
   await page.getByRole('combobox',{name:'Source filter'}).selectOption('openalex');
   await page.getByRole('combobox',{name:'Year filter'}).selectOption(paper.published_at.slice(0,4));

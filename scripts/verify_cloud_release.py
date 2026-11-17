@@ -47,7 +47,15 @@ def verify():
                      node['source'] == 'openalex' and any(edge['source_id'] == node['id'] and
                      edge['kind'] == 'AUTHORED_BY' for edge in graph['edges']))
         question = f'Who authored {paper["label"]}?'
-        events = read_events(client.post(f'{base}/api/investigate', json={'question': question}))
+        guest = client.post(f'{base}/api/investigate', json={'question': question})
+        assert guest.status_code == 403
+        token = terraform_output('operator_token')
+        headers = {'X-Admin-Token': token}
+        session = client.get(f'{base}/api/admin/session', headers=headers)
+        session.raise_for_status()
+        assert session.json() == {'role': 'admin'}
+        events = read_events(client.post(f'{base}/api/investigate',
+                                         json={'question': question, 'mode': 'indexed'}, headers=headers))
         completed = next(payload for name, payload in events if name == 'investigation.completed')
         path = next(payload for name, payload in events if name == 'graph.path.selected')
         assert paper['source_record_id'] in [item['url'] for item in completed['citations']]
@@ -55,17 +63,16 @@ def verify():
         result = {'url': base, 'records': status['counts']['source_records'],
                   'scholarly_records': status['counts']['scholarly_records'],
                   'entities': len(graph['nodes']), 'relationships': len(graph['edges']),
-                  'cited_answer': True, 'evidence_path': True}
+                  'cited_answer': True, 'evidence_path': True, 'guest_blocked': True,
+                  'operator_auth': True}
         if args.with_operator or args.operator_auth_only:
-            token = terraform_output('operator_token')
-            headers = {'X-Admin-Token': token}
             lab = client.get(f'{base}/api/laboratory', headers=headers)
             lab.raise_for_status()
             assert 'datasets' in lab.json()
-            result['operator_auth'] = True
+            result['laboratory_access'] = True
         if args.with_operator:
             agent_events = read_events(client.post(f'{base}/api/investigate',
-                                                    json={'question': question}, headers=headers))
+                                                    json={'question': question, 'mode': 'agent'}, headers=headers))
             errors = [payload for name, payload in agent_events if name == 'agent.error']
             assert not errors, f'ADK failed: {errors}'
             assert any(name == 'agent.activated' and payload.get('mode') == 'adk'

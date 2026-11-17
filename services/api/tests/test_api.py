@@ -13,6 +13,7 @@ from neuromesh_api.store import connect
 def test_empty_start_and_api(tmp_path, monkeypatch):
     monkeypatch.delenv('NEUROMESH_DATABASE_URL', raising=False)
     monkeypatch.setenv('NEUROMESH_DB', str(tmp_path / 'test.db'))
+    monkeypatch.setenv('NEUROMESH_ADMIN_TOKEN', 'local-test-secret')
     with TestClient(app) as client:
         assert client.get('/api/health').json() == {'ok': True}
         graph = client.get('/api/graph').json()
@@ -21,7 +22,14 @@ def test_empty_start_and_api(tmp_path, monkeypatch):
         assert client.get('/api/status').json()['counts']['entities'] == 0
         assert client.get('/api/analytics').json()['node_count'] == 0
         assert client.post('/api/admin/sync', json={'source': 'github'}).status_code == 403
-        response = client.post('/api/investigate', json={'question': 'What is the funding relationship?'})
+        assert client.get('/api/admin/session').status_code == 403
+        assert client.get('/api/admin/session', headers={'X-Admin-Token': 'wrong'}).status_code == 403
+        assert client.post('/api/investigate', json={'question': 'What is the funding relationship?'}).status_code == 403
+        with connect() as db:
+            assert db.execute('SELECT COUNT(*) AS n FROM investigations').fetchone()['n'] == 0
+        headers = {'X-Admin-Token': 'local-test-secret'}
+        assert client.get('/api/admin/session', headers=headers).json() == {'role': 'admin'}
+        response = client.post('/api/investigate', json={'question': 'What is the funding relationship?'}, headers=headers)
         assert response.status_code == 200
         assert 'No matching public records' in response.text
         assert 'investigation.completed' in response.text
@@ -42,6 +50,9 @@ def test_legacy_visual_seed_is_never_returned_as_research_data(tmp_path, monkeyp
 def test_provenance_and_deterministic_analytics(tmp_path, monkeypatch):
     monkeypatch.delenv('NEUROMESH_DATABASE_URL', raising=False)
     monkeypatch.setenv('NEUROMESH_DB', str(tmp_path / 'test.db'))
+    monkeypatch.setenv('NEUROMESH_ADMIN_TOKEN', 'local-test-secret')
+    monkeypatch.setenv('NEUROMESH_ENABLE_ADK', 'true')
+    monkeypatch.setenv('NEUROMESH_MODEL', 'test-model')
     with TestClient(app) as client:
         record = normalize_github({'id': 5, 'full_name': 'example/ai-agents',
                                    'html_url': 'https://github.com/example/ai-agents', 'created_at': '2024-01-01'})
@@ -55,8 +66,10 @@ def test_provenance_and_deterministic_analytics(tmp_path, monkeypatch):
         first = analyze_graph()
         assert first == analyze_graph()
         assert first['node_count'] == 1 and first['edge_count'] == 0
-        response = client.post('/api/investigate', json={'question': 'Find ai-agents repository'})
+        response = client.post('/api/investigate', json={'question': 'Find ai-agents repository'},
+                               headers={'X-Admin-Token': 'local-test-secret'})
         assert record['url'] in response.text
+        assert reserve_usage('adk_invocation', 1, 1)  # indexed questions do not reserve paid model usage
 
 
 def test_cloud_speech_is_operator_only_and_not_cached(tmp_path, monkeypatch):

@@ -23,6 +23,7 @@ def openalex_work(work_number, title, references=()):
 def test_source_backed_scholarly_graph_and_version_history(tmp_path, monkeypatch):
     monkeypatch.delenv('NEUROMESH_DATABASE_URL', raising=False)
     monkeypatch.setenv('NEUROMESH_DB', str(tmp_path / 'scholarly.db'))
+    monkeypatch.setenv('NEUROMESH_ADMIN_TOKEN', 'local-test-secret')
     with TestClient(app) as client:
         second = openalex_work(1002, 'Memory Research Results')
         second['authorships'] = []
@@ -48,7 +49,8 @@ def test_source_backed_scholarly_graph_and_version_history(tmp_path, monkeypatch
         assert all(edge['evidence_id'] in graph['evidence'] for edge in graph['edges'])
         assert all(graph['evidence'][edge['evidence_id']]['url'].startswith('https://openalex.org/W')
                    for edge in graph['edges'])
-        response = client.post('/api/investigate', json={'question': 'Find Memory Research Methods'})
+        response = client.post('/api/investigate', json={'question': 'Find Memory Research Methods'},
+                               headers={'X-Admin-Token': 'local-test-secret'})
         assert response.status_code == 200
         assert 'relationship.discovered' in response.text
         assert 'https://openalex.org/W1001' in response.text

@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from typing import Literal
 
 from .analytics import analyze_graph
 from .ingestion import SOURCES, synchronize
@@ -28,7 +29,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title='NeuroMesh AI API', version='0.3.0', lifespan=lifespan)
+app = FastAPI(title='NeuroMesh AI API', version='0.3.1', lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=[os.getenv('NEUROMESH_CORS_ORIGIN', 'http://localhost:5173')],
                    allow_methods=['GET','POST'], allow_headers=['Content-Type','X-Admin-Token'])
 _request_times: dict[str, deque[float]] = defaultdict(deque)
@@ -37,6 +38,7 @@ _request_times: dict[str, deque[float]] = defaultdict(deque)
 class InvestigationRequest(BaseModel):
     question: str = Field(min_length=5, max_length=500)
     session_id: UUID | None = None
+    mode: Literal['indexed', 'agent'] = 'indexed'
 
 
 class SyncRequest(BaseModel):
@@ -57,6 +59,13 @@ def authorized(token: str | None) -> bool:
 @app.get('/api/health')
 def health():
     return {'ok': True}
+
+
+@app.get('/api/admin/session')
+def admin_session(x_admin_token: str | None = Header(default=None)):
+    if not authorized(x_admin_token):
+        raise HTTPException(status_code=403, detail='Admin login required')
+    return {'role': 'admin'}
 
 
 @app.get('/api/graph')
@@ -136,6 +145,8 @@ def get_run_report(run_id: UUID, x_admin_token: str | None = Header(default=None
 
 @app.post('/api/investigate')
 async def start_investigation(request: InvestigationRequest, connection: Request, x_admin_token: str | None = Header(default=None)):
+    if not authorized(x_admin_token):
+        raise HTTPException(status_code=403, detail='Admin login required')
     address = connection.client.host if connection.client else 'unknown'
     times = _request_times[address]
     now = time.monotonic()
@@ -144,8 +155,7 @@ async def start_investigation(request: InvestigationRequest, connection: Request
     if len(times) >= 30:
         raise HTTPException(status_code=429, detail='Hourly investigation limit reached')
     times.append(now)
-    allow_adk = authorized(x_admin_token)
-    return StreamingResponse(investigate(request.question, allow_adk=allow_adk,
+    return StreamingResponse(investigate(request.question, is_operator=True, use_agent=request.mode == 'agent',
                                          session_id=str(request.session_id) if request.session_id else None), media_type='text/event-stream',
                              headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
 
