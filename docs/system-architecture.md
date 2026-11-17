@@ -24,7 +24,7 @@ The public investigation path uses deterministic retrieval and citations. A conf
 - Deterministic parsers normalize identifiers and create relationships only from source fields. Model prose is not persisted as a verified relationship.
 - Browser code receives no provider key. The operator token stays in browser memory and is sent only to protected endpoints.
 - A public visitor can inspect evidence and ask a bounded deterministic question. They cannot run ingestion, paid speech, ADK, or experiments.
-- The existing live Cloud Run release has not been updated with this work. Cloud resource changes require separate cost review and approval.
+- Release 0.3.0 is deployed on the existing Cloud Run service and Cloud SQL database. Terraform added no resource during this release. Further resource or cost changes require review.
 
 ## Current limits
 

@@ -4,7 +4,7 @@ NeuroMesh AI is an open-source workbench for exploring public AI and scientific 
 
 ![NeuroMesh AI Observatory](docs/screenshots/observatory-home.png)
 
-The image is a Playwright capture of the running local React/FastAPI application with the existing animated 3D face and source-backed graph. It is not a concept render. Decorative ambient particles are not research entities.
+The image is a Playwright capture of the deployed React/FastAPI application with the existing animated 3D face and source-backed graph. It is not a concept render. Decorative ambient particles are not research entities.
 
 ## What works
 
@@ -12,7 +12,7 @@ The Observatory renders source-backed entities and typed relationships, animated
 
 Research searches indexed source records and filters by source, year, topic, and institution. Pipelines shows actual sync jobs and failures. Analytics computes graph measures and deterministic title clusters. Agents shows recorded operator-only executions. The Cognitive Research Laboratory shows real dataset and run state; it does not display fabricated rankings. The current pilot dataset is pending human review and has no real model runs.
 
-The local build has live ingested OpenAlex, arXiv, and PubMed records. The previously deployed Cloud Run service is an older release; the current scholarly and memory changes have **not** been deployed or pushed to GitHub.
+The live Cloud Run build has ingested OpenAlex, arXiv, and PubMed records. The same source-backed graph, memory schema, and research assistant are available locally. The release commits have not been pushed to GitHub.
 
 ## Architecture
 
@@ -81,7 +81,11 @@ Keep `NCBI_EMAIL` and `NEUROMESH_ADMIN_TOKEN` in local or secret-managed configu
 
 ## Google Cloud
 
-The [existing live demo](https://neuromesh-observatory-wwtovkiwnq-uc.a.run.app/) is an earlier build. Terraform and the [deployment runbook](docs/architecture/gcp-deployment.md) target the existing `moesautomationweekly` project with Cloud Run, Cloud SQL, Artifact Registry, Secret Manager, and a scoped runtime identity. The [cost notes](docs/architecture/costs.md) document the current baseline and guardrails. The changes in this worktree are local: no production deployment, new paid resource, or repository push has been made for this phase. A fresh cloud inspection currently requires Google CLI reauthentication.
+**Live Observatory:** [NeuroMesh AI on Cloud Run](https://neuromesh-observatory-wwtovkiwnq-uc.a.run.app/). Release 0.3.0 is deployed to the existing `moesautomationweekly` project with Cloud Run and Cloud SQL. Terraform updated the service in place: 0 resources added, 1 changed, 0 destroyed. The [deployment runbook](docs/architecture/gcp-deployment.md) and [cost notes](docs/architecture/costs.md) document the existing resources and guardrails. The project has a $40 monthly alert with $10, $25, and $40 notifications; alerts do not cap billing.
+
+The deployed database held 47 public source records on 2026-11-16, including 15 normalized scholarly works, 171 visible source-backed entities, and 159 evidence-linked current relationships. These are observed counts from a bounded six-source index, not research findings or estimates of source coverage. A public visitor can browse, filter, and ask deterministic cited questions. Enter the operator token from private Terraform output in Observatory settings to use the configured ADK research/verification and Cloud TTS paths. The token is never committed or shown in this README.
+
+For operator research, open the live Observatory, retrieve the token in a private terminal with `cd infrastructure/terraform && ../../.local/bin/terraform output -raw operator_token`, and paste it into **Settings**. Ask a typed question to see cited graph traversal. For voice, enable voice mode and unmute the assistant; **Talk** requests microphone permission on click. Browser speech recognition requires a working Chrome recognition service and input device. Stop interrupts playback. Keep the token out of shared terminals and screenshots.
 
 ## Validation and limitations
 
@@ -93,4 +97,4 @@ npm run test:e2e   # with API and web servers running
 node scripts/capture_observatory.mjs
 ```
 
-Local tests exercise source parsing, lineage, relationship withdrawal, memory, experiment cost gates and exports, audio behavior, graph navigation, and cited investigations. The PostgreSQL integration test requires an isolated test URL and is skipped otherwise. Browser voice behavior varies by device and permission. The live graph is still small; cross-source identity resolution, scheduled incremental ingestion, graph expansion, dense retrieval, full cognitive benchmarks, and real repeated provider trials remain in progress. [Research results](research/results/README.md) are intentionally empty until measured evidence exists.
+Local tests exercise source parsing, lineage, relationship withdrawal, memory, experiment cost gates and exports, audio behavior, graph navigation, and cited investigations. The PostgreSQL integration test passed against an isolated local instance. The deployed service passed 11 Playwright browser tests, a live cited-answer and evidence-path check, one bounded ADK investigation, Cloud TTS WAV generation, and a Chrome audio playback check with 20 nonzero PCM face-animation frames and interruption. Physical microphone behavior still depends on Chrome permission and device support. The live graph is small; cross-source identity resolution, scheduled incremental ingestion, graph expansion, dense retrieval, full cognitive benchmarks, and real repeated provider trials remain in progress. [Research results](research/results/README.md) are intentionally empty until measured evidence exists.

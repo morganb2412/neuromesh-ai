@@ -68,3 +68,9 @@ Gate 3 validation: the local API returns 180 source-backed entities and 165 evid
 - [ ] Review repository contents and history for secrets before requesting authorization to push.
 
 No gate is marked complete merely because a UI element exists. Each gate requires passing tests and observed end-to-end behavior.
+
+## Post-audit deployment verification — 2026-11-16
+
+After the audit, release 0.3.0 was deployed to the existing Cloud Run service by an in-place Terraform update (0 added, 1 changed, 0 destroyed). Cloud SQL remained `RUNNABLE`. A bounded deployed sync stored five new scholarly records each from OpenAlex, arXiv, and PubMed. The public API reported 47 source records, 15 normalized scholarly works, 171 visible source-backed entities, and 159 evidenced relationships. One public cited investigation selected relationship IDs present in the graph; one operator ADK investigation and a Cloud TTS WAV request passed. A deployed Chrome voice turn observed 20 nonzero PCM animation frames and successful interruption. Eleven Playwright tests passed against the public URL. The homepage image in the README was recaptured from that deployed release.
+
+These checks validate a working research browsing and assistant path. They do not complete the cognitive benchmark, scheduled ingestion, cross-source resolution, or physical microphone test. The two 15-task local evaluation drafts remain unreviewed and were not copied into Cloud SQL. No GitHub push was made.

@@ -11,7 +11,7 @@ from pathlib import Path
 import httpx
 
 TERRAFORM_DIR = Path(__file__).resolve().parents[1] / 'infrastructure' / 'terraform'
-TERRAFORM = Path(__file__).resolve().parents[2] / '.local' / 'bin' / 'terraform'
+TERRAFORM = Path(__file__).resolve().parents[1] / '.local' / 'bin' / 'terraform'
 QUERIES = {
     'openalex': 'continual learning',
     'arxiv': 'continual learning',
