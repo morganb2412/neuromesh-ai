@@ -4,15 +4,41 @@ NeuroMesh AI is an open-source workbench for exploring public AI and scientific 
 
 ![NeuroMesh AI Observatory](docs/screenshots/observatory-home.png)
 
-The image is a Playwright capture of the deployed React/FastAPI application with the existing animated 3D face and source-backed graph. It is not a concept render. Decorative ambient particles are not research entities.
+This is a Playwright capture of the deployed application on 2026-11-17. The graph contains indexed public records; ambient particles are decorative. The existing animated 3D face appears at upper right. [Open the live Observatory](https://neuromesh-observatory-wwtovkiwnq-uc.a.run.app/).
+
+<details>
+<summary>See the rest of the running application</summary>
+
+All images below were captured from the same Cloud Run deployment after their API responses loaded. They are application screens, not mockups. Admin screenshots were captured with the private token field closed; no credential is included.
+
+| Screen | Capture |
+| --- | --- |
+| Observatory with a cited investigation | ![Admin investigation and evidence path](docs/screenshots/observatory-admin.png) |
+| Research | ![Research records and filters](docs/screenshots/research.png) |
+| Pipelines | ![Ingestion jobs and source status](docs/screenshots/pipelines.png) |
+| Analytics | ![Measured graph analytics](docs/screenshots/analytics.png) |
+| Agents | ![Recorded agent executions](docs/screenshots/agents.png) |
+| LLM Lab | ![LLM Lab measured-run empty state](docs/screenshots/llm-lab.png) |
+| Experiments | ![Research experiments workspace](docs/screenshots/experiments.png) |
+| Reports | ![Research reports workspace](docs/screenshots/reports.png) |
+| Admin controls | ![Operator controls with no credential visible](docs/screenshots/admin-controls.png) |
+
+</details>
 
 ## What works
 
-The Observatory renders source-backed entities and typed relationships, animated graph movement, camera controls, search, filtering, an evidence inspector, and the existing holographic face. Public visitors can browse these records but cannot ask questions or change data. Admin sign-in with the private operator token unlocks typed questions, voice, and source sync. Indexed questions stream real investigation events that highlight the cited graph path. Gemini research and verification require a separate Admin switch. The face responds to assistant state; its mouth follows playback amplitude for Cloud TTS audio or browser speech timing. This is approximate speech synchronization, not phoneme-level lip sync. Microphone permission is requested on user action, and raw recordings are not stored by NeuroMesh.
+| Area | Verified behavior in the deployed 0.3.1 build |
+| --- | --- |
+| Public Observatory | Browse an animated 3D graph of indexed entities and evidence-linked edges; search, filter, move the camera, and inspect a record's source links. The original holographic face remains in the assistant panel. |
+| Research | Search real indexed records and filter by source, year, topic, and institution; open original source pages and locate records in the graph. |
+| Pipelines | View actual ingestion jobs, source status, record counts, and failures. OpenAlex, arXiv, and PubMed scholarly records have been ingested; GitHub, Hugging Face, and NIH RePORTER records are also indexed. Synchronization runs on request, not on a schedule. |
+| Analytics | Compute deterministic graph measures, PageRank, and TF-IDF title clusters from the current index. These are measurements of this small index, not conclusions about the field. |
+| Admin research | Sign in with a private operator token; ask a typed question against stored evidence; receive structured investigation events, cited source links, and graph highlighting. Public visitors can browse but cannot submit questions, sync sources, or invoke paid tools. |
+| Voice and face | Optional microphone input and speech output, interruptible playback, and face states tied to the assistant. Mouth movement follows audio amplitude or browser speech timing; it is approximate synchronization, not phoneme-level lip sync. Chrome speech recognition and the local input device must be available. Raw microphone recordings are not stored by NeuroMesh. |
+| Agents | Operator-only Google ADK research and verification path, with recorded execution status and token usage. The separate Admin switch enables Gemini calls; recent executions include failures, visible in the Agents screen. Indexed retrieval works without Gemini. |
+| Cognitive lab | Persisted memory, dataset, experiment, and run schemas; local dataset drafting and controlled runner. The deployed Lab, Experiments, and Reports screens reflect actual stored state. They currently have **zero validated datasets and zero measured model runs**. No comparative result is claimed. |
 
-Research searches indexed source records and filters by source, year, topic, and institution. Pipelines shows actual sync jobs and failures. Analytics computes graph measures and deterministic title clusters. Agents shows recorded operator-only executions. The Cognitive Research Laboratory shows real dataset and run state; it does not display fabricated rankings. The current pilot dataset is pending human review and has no real model runs.
-
-The live Cloud Run build has ingested OpenAlex, arXiv, and PubMed records. The same source-backed graph, memory schema, and research assistant are available locally. The release commits have not been pushed to GitHub.
+The live deployment uses Cloud Run and Cloud SQL. Its index is intentionally small and does not represent comprehensive coverage of any source. A failed ingestion job remains visible as a failure, and an unavailable source is not replaced with invented records.
 
 ## Architecture
 
@@ -83,7 +109,7 @@ Keep `NCBI_EMAIL` and `NEUROMESH_ADMIN_TOKEN` in local or secret-managed configu
 
 **Live Observatory:** [NeuroMesh AI on Cloud Run](https://neuromesh-observatory-wwtovkiwnq-uc.a.run.app/). Release 0.3.1 uses the existing `moesautomationweekly` project with Cloud Run and Cloud SQL. The [deployment runbook](docs/architecture/gcp-deployment.md) and [cost notes](docs/architecture/costs.md) document the existing resources and guardrails. The project has a $40 monthly alert with $10, $25, and $40 notifications; alerts do not cap billing.
 
-The deployed database held 47 public source records on 2026-11-16, including 15 normalized scholarly works, 171 visible source-backed entities, and 159 evidence-linked current relationships. These are observed counts from a bounded six-source index, not research findings or estimates of source coverage. Visitors can browse and filter. Research questions, voice, and ingestion require Admin sign-in; the API rejects unauthorized POST requests. The token is never committed or shown in this README.
+The deployed database held 47 public source records on 2026-11-17, including 15 normalized scholarly works, 171 visible source-backed entities, and 159 evidence-linked current relationships. These are observed counts from a bounded six-source index, not research findings or estimates of source coverage. Visitors can browse and filter. Research questions, voice, and ingestion require Admin sign-in; the API rejects unauthorized POST requests. The token is never committed or shown in this README.
 
 For operator research, open the live Observatory, click **Admin**, and sign in with the current token. Copy it directly to the clipboard in a private terminal with `cd infrastructure/terraform && ../../.local/bin/terraform output -raw operator_token | pbcopy`, then paste it into the Admin form. Indexed questions use stored evidence without a model call; select **Use Gemini agent for questions** when you want a capped model investigation. For voice, enable voice mode and unmute the assistant; **Talk** requests microphone permission on click. Browser speech recognition requires a working Chrome recognition service and input device. Stop interrupts playback. Keep the token out of chats, shared terminals, and screenshots.
 
@@ -96,5 +122,7 @@ npm test
 npm run test:e2e   # with API and web servers running
 node scripts/capture_observatory.mjs
 ```
+
+To refresh the README gallery from a deployment, run `NEUROMESH_APP_URL=https://your-deployment.example node scripts/capture_readme_screenshots.mjs`. Public screenshots require no token. Set `NEUROMESH_ADMIN_TOKEN` privately to capture the operator screens too; the script never prints the token or captures its input field. The maintainer's local Terraform outputs can also supply both values. Capture uses a stored-evidence question and does not enable Gemini or TTS.
 
 Local tests exercise source parsing, lineage, relationship withdrawal, memory, experiment cost gates and exports, audio behavior, graph navigation, and cited investigations. The PostgreSQL integration test passed against an isolated local instance. Release 0.3.1 passed 13 Playwright browser tests against Cloud Run, including guest denial, invalid Admin sign-in, authorized cited retrieval, voice controls, and sign-out. The live API check also confirmed read-only guest access and an authenticated evidence path without paid provider calls. A prior 0.3.0 test verified a bounded ADK investigation, Cloud TTS WAV generation, and Chrome audio playback with 20 nonzero PCM face-animation frames and interruption. Physical microphone behavior still depends on Chrome permission and device support. The live graph is small; cross-source identity resolution, scheduled incremental ingestion, graph expansion, dense retrieval, full cognitive benchmarks, and real repeated provider trials remain in progress. [Research results](research/results/README.md) are intentionally empty until measured evidence exists.
