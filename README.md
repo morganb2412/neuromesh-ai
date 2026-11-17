@@ -10,7 +10,7 @@ The image is a Playwright capture of the running local React/FastAPI application
 
 The Observatory renders source-backed entities and typed relationships, animated graph movement, camera controls, search, filtering, an evidence inspector, and the existing holographic face. Typed questions retrieve indexed records and stream real investigation events that highlight the cited graph path. The face responds to assistant state; its mouth follows playback amplitude for Cloud TTS audio or browser speech timing. This is approximate speech synchronization, not phoneme-level lip sync. Microphone permission is requested on user action, and raw recordings are not stored by NeuroMesh.
 
-Research searches indexed source records. Pipelines shows actual sync jobs and failures. Analytics computes graph measures and deterministic title clusters. Agents shows recorded operator-only executions. The Cognitive Research Laboratory shows real dataset and run state; it does not display fabricated rankings. The current pilot dataset is pending human review and has no real model runs.
+Research searches indexed source records and filters by source, year, topic, and institution. Pipelines shows actual sync jobs and failures. Analytics computes graph measures and deterministic title clusters. Agents shows recorded operator-only executions. The Cognitive Research Laboratory shows real dataset and run state; it does not display fabricated rankings. The current pilot dataset is pending human review and has no real model runs.
 
 The local build has live ingested OpenAlex, arXiv, and PubMed records. The previously deployed Cloud Run service is an older release; the current scholarly and memory changes have **not** been deployed or pushed to GitHub.
 

@@ -40,6 +40,9 @@ def test_source_backed_scholarly_graph_and_version_history(tmp_path, monkeypatch
             assert json.loads(scholarly['authors_json'])[0]['name'] == 'Test Author'
             assert db.execute('SELECT COUNT(*) AS n FROM source_record_versions').fetchone()['n'] == 2
         graph = client.get('/api/graph').json()
+        paper_node = next(node for node in graph['nodes'] if node['label'] == 'Memory Research Methods')
+        assert paper_node['source'] == 'openalex'
+        assert paper_node['published_at'] == '2025-04-10'
         kinds = {edge['kind'] for edge in graph['edges']}
         assert {'AUTHORED_BY','AFFILIATED_WITH','HAS_TOPIC','CITES'} <= kinds
         assert all(edge['evidence_id'] in graph['evidence'] for edge in graph['edges'])

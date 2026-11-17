@@ -50,10 +50,10 @@ Gate 2 validation: bounded live local syncs returned five normalized records per
 ### Gate 3 — real graph and assistant
 
 - [x] Materialize only source-backed paper, author, institution, topic, and citation edges with evidence and confidence class.
-- [ ] Add graph expansion and source/date/topic filters, evidence inspection, and actual citation-path highlighting. Evidence inspection and explicit SSE edge highlighting work; expansion and filters remain.
+- [ ] Add graph expansion and source/date/topic filters, evidence inspection, and actual citation-path highlighting. Evidence inspection and explicit SSE edge highlighting work; Research now filters source, year, topic, and institution, while graph expansion remains.
 - [x] Make local and ADK answers cite retrieved records, disclose uncertainty, and persist session context for operator sessions.
 
-Gate 3 validation: the local API returns 180 source-backed entities and 165 evidence-linked current relationships. A Playwright integration followed a real OpenAlex paper through Research, graph evidence inspection, and a cited assistant answer. Cross-source identity resolution and historical graph navigation remain open, so Gate 3 is partial.
+Gate 3 validation: the local API returns 180 source-backed entities and 165 evidence-linked current relationships. A Playwright integration followed a real OpenAlex paper through Research, graph evidence inspection, camera focus/reset, and a cited assistant answer. Camera focus now uses the node's live simulated position; the evidence inspector scrolls without covering graph controls. Cross-source identity resolution and historical graph navigation remain open, so Gate 3 is partial.
 
 ### Gate 4 — cognitive research and experiments
 

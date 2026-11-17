@@ -203,7 +203,9 @@ def reserve_usage(kind: str, units: int, daily_limit: int) -> bool:
 
 def graph():
     with connect() as db:
-        all_nodes = [dict(row) for row in db.execute('SELECT id,label,kind,description,demo,source_record_id FROM entities WHERE demo=0 AND source_record_id IS NOT NULL')]
+        all_nodes = [dict(row) for row in db.execute('''SELECT e.id,e.label,e.kind,e.description,e.demo,
+            e.source_record_id,s.source,s.published_at FROM entities e
+            JOIN source_records s ON s.id=e.source_record_id WHERE e.demo=0''')]
         edges = [dict(row) for row in db.execute('''SELECT r.id,r.source_id,r.target_id,r.kind,r.confidence,r.evidence_id,r.demo
             FROM relationships r JOIN entities a ON a.id=r.source_id JOIN entities b ON b.id=r.target_id
             LEFT JOIN relationship_observations o ON o.relationship_id=r.id

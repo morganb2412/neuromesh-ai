@@ -28,4 +28,4 @@ The public investigation path uses deterministic retrieval and citations. A conf
 
 ## Current limits
 
-The local graph is still small. Author and institution identity resolution across sources is intentionally conservative. Evaluation retrieval uses sparse title features; it does not yet benchmark dense embeddings or a full cognitive-memory curriculum. Graph camera focus, historical visual snapshots, scheduled ingestion, and multi-user authentication remain open work.
+The local graph is still small. Author and institution identity resolution across sources is intentionally conservative. Evaluation retrieval uses sparse title features; it does not yet benchmark dense embeddings or a full cognitive-memory curriculum. Graph expansion, historical visual snapshots, scheduled ingestion, and multi-user authentication remain open work.

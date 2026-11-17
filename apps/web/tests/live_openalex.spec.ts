@@ -13,9 +13,14 @@ test('live OpenAlex work flows through graph inspection and cited assistant answ
 
   await page.goto('/');
   await page.getByRole('button',{name:'Research',exact:true}).click();
+  await page.getByRole('combobox',{name:'Source filter'}).selectOption('openalex');
+  await page.getByRole('combobox',{name:'Year filter'}).selectOption(paper.published_at.slice(0,4));
   await page.getByRole('textbox',{name:'Search public records'}).fill(paper.label);
   await page.getByRole('button',{name:'Locate in graph'}).first().click();
   await expect(page.locator('.entity-inspector')).toContainText('AUTHORED BY');
+  await expect(page.getByTitle('Focus selected')).toBeEnabled();
+  await page.getByTitle('Focus selected').click();
+  await page.getByTitle('Reset camera').click();
   await page.getByRole('textbox',{name:'Research question'}).fill(`Who authored ${paper.label}?`);
   await page.getByTitle('Send question').click();
   await expect(page.locator('.message.assistant').last()).toContainText(author.label);

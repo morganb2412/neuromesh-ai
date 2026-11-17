@@ -15,17 +15,16 @@ function initialPosition(node: Entity, i: number): THREE.Vector3 {
   return new THREE.Vector3(c[0]+Math.cos(a)*r,c[1]+Math.sin(a)*r,c[2]+(hash(node.id+'z')-.5)*7);
 }
 
-function CameraActions({ focus, data, controls, resetSignal, mode2d }: { focus: string | null; data: GraphData; controls: RefObject<ComponentRef<typeof OrbitControls> | null>; resetSignal: number; mode2d: boolean }) {
+function CameraActions({ focus, data, positions, controls, resetSignal, focusSignal, mode2d }: { focus: string | null; data: GraphData; positions: THREE.Vector3[]; controls: RefObject<ComponentRef<typeof OrbitControls> | null>; resetSignal: number; focusSignal: number; mode2d: boolean }) {
   const { camera } = useThree();
   useEffect(() => { camera.position.set(0,0,mode2d ? 38 : 31); controls.current?.target.set(0,0,0); controls.current?.update(); }, [mode2d, resetSignal, camera, controls]);
-  useEffect(() => { if (!focus) return; const index=data.nodes.findIndex(n=>n.id===focus);if(index<0)return;const p=initialPosition(data.nodes[index],index).multiplyScalar(1.5);camera.position.set(p.x,p.y,p.z+15);controls.current?.target.copy(p);controls.current?.update(); }, [focus,data,camera,controls]);
+  useEffect(() => { if (!focus) return; const index=data.nodes.findIndex(n=>n.id===focus);if(index<0)return;const p=positions[index].clone().multiplyScalar(1.5);camera.position.set(p.x,p.y,p.z+15);controls.current?.target.copy(p);controls.current?.update(); }, [focus,focusSignal,data,positions,camera,controls]);
   return null;
 }
 
-function LivingNetwork({ data, selected, onSelect, query, visibleKinds, visibleEdges, highlighted, highlightedEdges, paused, reducedMotion, mode2d }: {
- data: GraphData; selected: string | null; onSelect: (id: string) => void; query: string; visibleKinds: Set<string>; visibleEdges: Set<string>; highlighted: Set<string>; highlightedEdges: Set<string>; paused: boolean; reducedMotion: boolean; mode2d: boolean;
+function LivingNetwork({ data, positions, selected, onSelect, query, visibleKinds, visibleEdges, highlighted, highlightedEdges, paused, reducedMotion, mode2d }: {
+ data: GraphData; positions: THREE.Vector3[]; selected: string | null; onSelect: (id: string) => void; query: string; visibleKinds: Set<string>; visibleEdges: Set<string>; highlighted: Set<string>; highlightedEdges: Set<string>; paused: boolean; reducedMotion: boolean; mode2d: boolean;
 }) {
-  const positions = useMemo(() => data.nodes.map(initialPosition), [data]);
   const velocities = useMemo(() => data.nodes.map(() => new THREE.Vector3()), [data]);
   const nodeIndex = useMemo(() => new Map(data.nodes.map((n,i)=>[n.id,i])), [data]);
   const edgePairs = useMemo(() => data.edges.map(e=>[nodeIndex.get(e.source_id),nodeIndex.get(e.target_id),e] as const).filter(x=>x[0]!==undefined && x[1]!==undefined),[data,nodeIndex]);
@@ -99,11 +98,12 @@ function AmbientField({ reducedMotion }: { reducedMotion: boolean }) {
   return <points ref={ref}><bufferGeometry><bufferAttribute attach="attributes-position" args={[vertices,3]}/></bufferGeometry><pointsMaterial size={.026} color="#326b91" transparent opacity={.54} depthWrite={false}/></points>;
 }
 
-export function GraphScene(props: {data:GraphData;selected:string|null;onSelect:(id:string)=>void;query:string;visibleKinds:Set<string>;visibleEdges:Set<string>;highlighted:Set<string>;highlightedEdges:Set<string>;paused:boolean;reducedMotion:boolean;mode2d:boolean;resetSignal:number}) {
+export function GraphScene(props: {data:GraphData;selected:string|null;onSelect:(id:string)=>void;query:string;visibleKinds:Set<string>;visibleEdges:Set<string>;highlighted:Set<string>;highlightedEdges:Set<string>;paused:boolean;reducedMotion:boolean;mode2d:boolean;resetSignal:number;focusSignal:number}) {
   const controls=useRef<ComponentRef<typeof OrbitControls>>(null);
+  const positions=useMemo(()=>props.data.nodes.map(initialPosition),[props.data]);
   return <Canvas aria-label="Interactive neural knowledge graph" camera={{position:[0,0,31],fov:58}} dpr={[1,1.6]} gl={{antialias:true,alpha:true,powerPreference:'high-performance'}} onPointerMissed={()=>props.onSelect('')}>
     <color attach="background" args={['#050d19']}/><fog attach="fog" args={['#050d19',35,80]}/>
-    <AmbientField reducedMotion={props.reducedMotion}/><LivingNetwork {...props}/><OrbitControls ref={controls} enableDamping dampingFactor={.08} minDistance={8} maxDistance={65} enablePan/>
-    <CameraActions focus={props.selected} data={props.data} controls={controls} resetSignal={props.resetSignal} mode2d={props.mode2d}/>
+    <AmbientField reducedMotion={props.reducedMotion}/><LivingNetwork {...props} positions={positions}/><OrbitControls ref={controls} enableDamping dampingFactor={.08} minDistance={8} maxDistance={65} enablePan/>
+    <CameraActions focus={props.selected} data={props.data} positions={positions} controls={controls} resetSignal={props.resetSignal} focusSignal={props.focusSignal} mode2d={props.mode2d}/>
   </Canvas>;
 }
