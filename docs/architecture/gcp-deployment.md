@@ -9,6 +9,7 @@ Use an authenticated Google Cloud CLI account with the required project, IAM, Cl
 ```bash
 gcloud auth list
 gcloud config set project moesautomationweekly
+export TF_VAR_ncbi_contact_email="$(git config user.email)"
 cd infrastructure/terraform
 terraform init
 terraform validate
@@ -32,7 +33,7 @@ This creates a dedicated database, repository, service account, Secret Manager e
 From the repository root, use the repository URI from Terraform output. Build the multi-stage Dockerfile with Cloud Build, then use the pushed digest for Terraform deployment:
 
 ```bash
-IMAGE=us-central1-docker.pkg.dev/moesautomationweekly/neuromesh/observatory:0.2.5
+IMAGE=us-central1-docker.pkg.dev/moesautomationweekly/neuromesh/observatory:0.3.0
 gcloud builds submit --project moesautomationweekly --config cloudbuild.yaml --substitutions=_IMAGE=$IMAGE .
 cd infrastructure/terraform
 terraform plan -var project_id=moesautomationweekly -var deploy_app=true -var image=IMAGE_DIGEST_URI
@@ -44,7 +45,7 @@ Replace `IMAGE_DIGEST_URI` with the full Artifact Registry path ending in `@sha2
 
 Cloud Run is public through `invoker_iam_disabled=true`, Google's supported approach when domain-restricted sharing blocks an `allUsers` IAM grant. Visitors can explore indexed records and submit bounded local investigations. Model calls, source synchronization, and Cloud speech require the operator token. Retrieve that token in a private terminal using `terraform output -raw operator_token` and enter it in the app settings. The token is held in browser memory for that tab. Do not put it in URLs, Git, screenshots, or shared logs.
 
-The initial Cloud SQL database contained the labeled visual demonstration layer. The deployed app has since indexed eight records from each of the four approved public APIs. Verify the source counts, evidence links, Research records, and Analytics fingerprint at the [live Observatory](https://neuromesh-observatory-wwtovkiwnq-uc.a.run.app/). Repeated syncs upsert records by stable source ID.
+The initial Cloud SQL database contained the labeled visual demonstration layer. The 0.3.0 application hides those rows from research views and analytics. After deployment, `scripts/sync_cloud_scholarly.py --limit 5` performs a bounded operator-only sync of OpenAlex, arXiv, and PubMed into the existing database. The script reads the Terraform operator token privately and never prints it. The NCBI contact email is passed through a sensitive Terraform variable from local Git configuration, never committed to Git. Verify source counts, evidence links, Research records, and analytics at the [live Observatory](https://neuromesh-observatory-wwtovkiwnq-uc.a.run.app/). Repeated syncs upsert records by stable source ID.
 
 ## Optional paid model and voice
 

@@ -57,6 +57,16 @@ variable "enable_cloud_tts" {
   default = false
 }
 
+variable "ncbi_contact_email" {
+  type        = string
+  sensitive   = true
+  description = "NCBI E-utilities developer contact; supply through TF_VAR_ncbi_contact_email outside Git."
+  validation {
+    condition     = can(regex("^[^@ ]+@[^@ ]+\\.[^@ ]+$", var.ncbi_contact_email))
+    error_message = "Supply a valid NCBI developer contact email outside Git."
+  }
+}
+
 provider "google" {
   project = var.project_id
   region  = var.region
@@ -252,6 +262,10 @@ resource "google_cloud_run_v2_service" "app" {
       env {
         name  = "GOOGLE_CLOUD_LOCATION"
         value = var.model_location
+      }
+      env {
+        name  = "NCBI_EMAIL"
+        value = var.ncbi_contact_email
       }
       env {
         name  = "NEUROMESH_ADK_DAILY_LIMIT"

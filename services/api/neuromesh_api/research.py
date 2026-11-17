@@ -9,6 +9,13 @@ from .store import connect, reserve_usage
 from .memory import record_episode, session_context
 
 
+def answer_uses_catalog_urls(answer: str, evidence: list[dict]) -> bool:
+    """Reject generated source URLs that were not retrieved in this turn."""
+    allowed = {item['url'] for item in evidence}
+    urls = [match.rstrip('.,;:)]') for match in re.findall(r'https?://[^\s<>"\]]+', answer)]
+    return bool(urls) and all(url in allowed for url in urls)
+
+
 def search_evidence(question: str, limit: int = 8):
     tokens = {t for t in re.findall(r'[a-z0-9]{4,}', question.lower()) if t not in {'what','show','between','about','with','from','does','have','relationship','artificial','intelligence'}}
     with connect() as db:
@@ -151,6 +158,8 @@ async def investigate(question: str, allow_adk: bool = False, session_id: str | 
                 answer = answer.strip()
                 if not answer:
                     raise RuntimeError('Verification agent returned no answer')
+                if not answer_uses_catalog_urls(answer, evidence):
+                    raise ValueError('Verification agent omitted a retrieved citation or cited an unindexed URL')
                 with connect() as db:
                     db.execute("UPDATE agent_executions SET state='completed',token_count=?,finished_at=CURRENT_TIMESTAMP WHERE id=?", (token_count,execution_id))
               except Exception as exc:
